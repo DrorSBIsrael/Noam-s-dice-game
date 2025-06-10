@@ -8,6 +8,9 @@
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Firebase -->
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
     <style>
         @keyframes gradient {
             0% { background-position: 0% 50%; }
@@ -35,15 +38,56 @@
         .player-glow {
             animation: glow 1s ease-in-out infinite;
         }
+
+        /* Mobile responsiveness */
+        @media (max-width: 768px) {
+            .game-table {
+                height: 300px !important;
+                max-width: 350px !important;
+            }
+            .player-avatar {
+                width: 60px !important;
+                height: 60px !important;
+                font-size: 24px !important;
+            }
+            .dice-main {
+                width: 48px !important;
+                height: 48px !important;
+                font-size: 24px !important;
+            }
+            .player-dice {
+                width: 24px !important;
+                height: 24px !important;
+                font-size: 12px !important;
+            }
+        }
     </style>
 </head>
 <body>
     <div id="root"></div>
 
     <script type="text/babel">
+        // Firebase Configuration
+const firebaseConfig = {
+  apiKey: "AIzaSyAgWTlNnhRHQ_iGt10EgFuxkib-Z-ifa7s",
+  authDomain: "noam-s-dice-game.firebaseapp.com",
+  databaseURL: "https://noam-s-dice-game-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId: "noam-s-dice-game",
+  storageBucket: "noam-s-dice-game.firebasestorage.app",
+  messagingSenderId: "504625659348",
+  appId: "1:504625659348:web:718a1b6b6317bf45cdea41",
+  measurementId: "G-H0P3KWLM1P"
+};
+
+        // Initialize Firebase
+        if (!firebase.apps.length) {
+            firebase.initializeApp(firebaseConfig);
+        }
+        const database = firebase.database();
+
         const { useState, useEffect, useRef } = React;
 
-        // Simple SVG icons instead of lucide
+        // Simple SVG icons
         const VolumeIcon = ({ enabled }) => (
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
@@ -61,38 +105,71 @@
         );
 
         const DiceGame = () => {
-          // Game state
+          // Local state
           const [screen, setScreen] = useState('welcome');
-          const [gameSettings, setGameSettings] = useState({
-            playerCount: 2,
-            gameType: 1
-          });
+          const [playerName, setPlayerName] = useState('');
+          const [gameId, setGameId] = useState('');
+          const [playerId, setPlayerId] = useState('');
+          const [soundEnabled, setSoundEnabled] = useState(true);
+          const [isRolling, setIsRolling] = useState(false);
+          const [diceResults, setDiceResults] = useState([]);
+          
+          // Game state from Firebase
+          const [gameData, setGameData] = useState(null);
           const [players, setPlayers] = useState([]);
           const [currentPlayerIndex, setCurrentPlayerIndex] = useState(0);
           const [gameRound, setGameRound] = useState(1);
-          const [isRolling, setIsRolling] = useState(false);
-          const [diceResults, setDiceResults] = useState([]);
-          const [soundEnabled, setSoundEnabled] = useState(true);
-          const [isFirstPlayer, setIsFirstPlayer] = useState(true);
           const [turnTimer, setTurnTimer] = useState(10);
+          const [gameSettings, setGameSettings] = useState({ playerCount: 2, gameType: 1 });
+          
           const audioRef = useRef(null);
+          const gameRef = useRef(null);
+
+          // Generate unique IDs
+          const generateId = () => Math.random().toString(36).substr(2, 9);
+
+          // Firebase listeners
+          useEffect(() => {
+            if (gameId && gameRef.current) {
+              const unsubscribe = gameRef.current.on('value', (snapshot) => {
+                const data = snapshot.val();
+                if (data) {
+                  setGameData(data);
+                  setPlayers(Object.values(data.players || {}));
+                  setCurrentPlayerIndex(data.currentPlayerIndex || 0);
+                  setGameRound(data.gameRound || 1);
+                  setTurnTimer(data.turnTimer || 10);
+                  setGameSettings(data.settings || { playerCount: 2, gameType: 1 });
+                  
+                  // Update screen based on game state
+                  if (data.status === 'waiting' && Object.keys(data.players || {}).length < data.settings.playerCount) {
+                    setScreen('waiting');
+                  } else if (data.status === 'playing') {
+                    setScreen('game');
+                  } else if (data.status === 'finished') {
+                    setScreen('gameOver');
+                  }
+                }
+              });
+
+              return () => gameRef.current.off('value', unsubscribe);
+            }
+          }, [gameId]);
 
           // Timer effect
           useEffect(() => {
-            let interval = null;
-            if (screen === 'game' && turnTimer > 0 && !isRolling) {
-              interval = setInterval(() => {
-                setTurnTimer(timer => {
-                  if (timer <= 1) {
+            if (screen === 'game' && gameData && gameData.status === 'playing') {
+              const interval = setInterval(() => {
+                if (turnTimer > 0 && !isRolling && players[currentPlayerIndex]?.id === playerId) {
+                  updateTimer(turnTimer - 1);
+                  if (turnTimer <= 1) {
                     rollDice();
-                    return 10;
                   }
-                  return timer - 1;
-                });
+                }
               }, 1000);
+              return () => clearInterval(interval);
             }
-            return () => clearInterval(interval);
-          }, [screen, turnTimer, isRolling]);
+          }, [screen, turnTimer, isRolling, currentPlayerIndex, playerId]);
 
           // Sound effects
           const playDiceSound = () => {
@@ -102,12 +179,96 @@
             }
           };
 
-          // Enhanced dice rolling animation
-          const rollDice = () => {
-            if (isRolling) return;
+          // Firebase functions
+          const createGame = async (settings, hostName) => {
+            const newGameId = generateId();
+            const newPlayerId = generateId();
+            
+            const gameData = {
+              id: newGameId,
+              status: 'waiting',
+              settings: settings,
+              players: {
+                [newPlayerId]: {
+                  id: newPlayerId,
+                  name: hostName,
+                  totalScore: 0,
+                  eliminated: false,
+                  lastRoll: null,
+                  isHost: true,
+                  joinedAt: Date.now()
+                }
+              },
+              currentPlayerIndex: 0,
+              gameRound: 1,
+              turnTimer: 10,
+              createdAt: Date.now()
+            };
+
+            await database.ref(`games/${newGameId}`).set(gameData);
+            setGameId(newGameId);
+            setPlayerId(newPlayerId);
+            gameRef.current = database.ref(`games/${newGameId}`);
+            setScreen('waiting');
+          };
+
+          const joinGame = async (gameIdToJoin, playerNameToJoin) => {
+            const newPlayerId = generateId();
+            
+            try {
+              const gameSnapshot = await database.ref(`games/${gameIdToJoin}`).once('value');
+              const existingGame = gameSnapshot.val();
+              
+              if (!existingGame) {
+                alert('שולחן לא נמצא! בדוק את הקוד.');
+                return;
+              }
+              
+              if (existingGame.status !== 'waiting') {
+                alert('המשחק כבר התחיל!');
+                return;
+              }
+              
+              const playerCount = Object.keys(existingGame.players || {}).length;
+              if (playerCount >= existingGame.settings.playerCount) {
+                alert('השולחן מלא!');
+                return;
+              }
+
+              await database.ref(`games/${gameIdToJoin}/players/${newPlayerId}`).set({
+                id: newPlayerId,
+                name: playerNameToJoin,
+                totalScore: 0,
+                eliminated: false,
+                lastRoll: null,
+                isHost: false,
+                joinedAt: Date.now()
+              });
+
+              // If table is full, start game
+              if (playerCount + 1 >= existingGame.settings.playerCount) {
+                await database.ref(`games/${gameIdToJoin}/status`).set('playing');
+              }
+
+              setGameId(gameIdToJoin);
+              setPlayerId(newPlayerId);
+              gameRef.current = database.ref(`games/${gameIdToJoin}`);
+              
+            } catch (error) {
+              alert('שגיאה בהתחברות לשולחן');
+            }
+          };
+
+          const updateTimer = async (newTimer) => {
+            if (gameRef.current) {
+              await gameRef.current.child('turnTimer').set(newTimer);
+            }
+          };
+
+          const rollDice = async () => {
+            if (isRolling || !gameRef.current || players[currentPlayerIndex]?.id !== playerId) return;
             
             setIsRolling(true);
-            setTurnTimer(10);
             playDiceSound();
             
             let rollCount = 0;
@@ -120,21 +281,22 @@
               if (rollCount >= maxRolls) {
                 clearInterval(rollInterval);
                 
-                setTimeout(() => {
+                setTimeout(async () => {
                   const finalResults = Array.from({length: 5}, () => Math.floor(Math.random() * 6) + 1);
                   setDiceResults(finalResults);
                   
                   const score = calculateScore(finalResults);
-                  const newPlayers = [...players];
-                  if (newPlayers[currentPlayerIndex]) {
-                    newPlayers[currentPlayerIndex].totalScore += score;
-                    newPlayers[currentPlayerIndex].lastRoll = {
+                  const combination = getScoreCombination(finalResults);
+                  
+                  // Update player's roll in Firebase
+                  await gameRef.current.child(`players/${playerId}`).update({
+                    totalScore: (players.find(p => p.id === playerId)?.totalScore || 0) + score,
+                    lastRoll: {
                       dice: finalResults,
                       score: score,
-                      combination: getScoreCombination(finalResults)
-                    };
-                    setPlayers(newPlayers);
-                  }
+                      combination: combination
+                    }
+                  });
                   
                   setIsRolling(false);
                   
@@ -146,50 +308,100 @@
             }, 100);
           };
 
-          // Calculate score
+          const nextTurn = async () => {
+            if (!gameRef.current) return;
+
+            const activePlayers = players.filter(p => !p.eliminated);
+            let nextIndex = (currentPlayerIndex + 1) % players.length;
+            
+            // Skip eliminated players
+            while (players[nextIndex] && players[nextIndex].eliminated) {
+              nextIndex = (nextIndex + 1) % players.length;
+            }
+            
+            // Check if round is complete
+            const firstActiveIndex = players.findIndex(p => !p.eliminated);
+            if (nextIndex === firstActiveIndex && activePlayers.every(p => p.lastRoll)) {
+              
+              if (gameSettings.gameType === 1) {
+                // Elimination mode
+                if (activePlayers.length > 1) {
+                  const lowestScore = Math.min(...activePlayers.map(p => p.totalScore));
+                  
+                  // Eliminate lowest scorers
+                  for (const player of activePlayers) {
+                    if (player.totalScore === lowestScore) {
+                      await gameRef.current.child(`players/${player.id}/eliminated`).set(true);
+                    }
+                  }
+                  
+                  const remainingPlayers = activePlayers.filter(p => p.totalScore !== lowestScore);
+                  if (remainingPlayers.length === 1) {
+                    await gameRef.current.child('status').set('finished');
+                    return;
+                  }
+                  
+                  // Clear last rolls and advance round
+                  for (const player of players) {
+                    await gameRef.current.child(`players/${player.id}/lastRoll`).set(null);
+                  }
+                  
+                  await gameRef.current.child('gameRound').set(gameRound + 1);
+                  nextIndex = players.findIndex(p => !p.eliminated);
+                }
+              } else if (gameSettings.gameType === 2) {
+                // 5 round mode
+                if (gameRound >= 5) {
+                  await gameRef.current.child('status').set('finished');
+                  return;
+                } else {
+                  // Clear last rolls and advance round
+                  for (const player of activePlayers) {
+                    await gameRef.current.child(`players/${player.id}/lastRoll`).set(null);
+                  }
+                  
+                  await gameRef.current.child('gameRound').set(gameRound + 1);
+                  nextIndex = 0;
+                }
+              }
+            }
+            
+            await gameRef.current.child('currentPlayerIndex').set(nextIndex);
+            await gameRef.current.child('turnTimer').set(10);
+          };
+
+          // Calculate score and combinations (same as before)
           const calculateScore = (dice) => {
             const counts = {};
             dice.forEach(d => counts[d] = (counts[d] || 0) + 1);
             const values = Object.values(counts).sort((a,b) => b-a);
             const sortedDice = [...dice].sort((a,b) => a-b);
             
-            if (values[0] === 5) {
-              return 5000 * dice[0];
-            }
-            
-            if (sortedDice.join('') === '12345' || sortedDice.join('') === '23456') {
-              return 10000;
-            }
-            
+            if (values[0] === 5) return 5000 * dice[0];
+            if (sortedDice.join('') === '12345' || sortedDice.join('') === '23456') return 10000;
             if (values[0] === 4) {
               const num = Object.keys(counts).find(k => counts[k] === 4);
               return 1500 * parseInt(num);
             }
-            
             if (values[0] === 3 && values[1] === 2) {
               const threeNum = Object.keys(counts).find(k => counts[k] === 3);
               return 500 * parseInt(threeNum);
             }
-            
             if (values[0] === 3) {
               const threeNum = Object.keys(counts).find(k => counts[k] === 3);
               return 250 * parseInt(threeNum);
             }
-            
             if (values[0] === 2 && values[1] === 2) {
               const pairs = Object.keys(counts).filter(k => counts[k] === 2).map(Number);
               return 100 * Math.max(...pairs);
             }
-            
             if (values[0] === 2) {
               const pairNum = Object.keys(counts).find(k => counts[k] === 2);
               return 10 * parseInt(pairNum);
             }
-            
             return dice.reduce((sum, d) => sum + d, 0);
           };
 
-          // Get combination name
           const getScoreCombination = (dice) => {
             const counts = {};
             dice.forEach(d => counts[d] = (counts[d] || 0) + 1);
@@ -206,81 +418,14 @@
             return 'ללא קומבינציה';
           };
 
-          // Next turn logic
-          const nextTurn = () => {
-            const activePlayers = players.filter(p => !p.eliminated);
-            let nextIndex = currentPlayerIndex;
-            
-            do {
-              nextIndex = (nextIndex + 1) % players.length;
-            } while (players[nextIndex] && players[nextIndex].eliminated);
-            
-            const firstActiveIndex = players.findIndex(p => !p.eliminated);
-            if (nextIndex === firstActiveIndex && activePlayers.every(p => p.lastRoll)) {
-              
-              if (gameSettings.gameType === 1) {
-                if (activePlayers.length > 1) {
-                  const lowestScore = Math.min(...activePlayers.map(p => p.totalScore));
-                  const newPlayers = players.map(p => ({
-                    ...p,
-                    eliminated: p.eliminated || (p.totalScore === lowestScore && !p.eliminated)
-                  }));
-                  setPlayers(newPlayers);
-                  
-                  const remaining = newPlayers.filter(p => !p.eliminated);
-                  if (remaining.length === 1) {
-                    setScreen('gameOver');
-                    return;
-                  }
-                  
-                  newPlayers.forEach(p => p.lastRoll = null);
-                  setGameRound(gameRound + 1);
-                  nextIndex = newPlayers.findIndex(p => !p.eliminated);
-                }
-              } else if (gameSettings.gameType === 2) {
-                if (gameRound >= 5) {
-                  setScreen('gameOver');
-                  return;
-                } else {
-                  activePlayers.forEach(p => p.lastRoll = null);
-                  setGameRound(gameRound + 1);
-                  nextIndex = players.findIndex(p => !p.eliminated);
-                }
-              }
-            }
-            
-            setCurrentPlayerIndex(nextIndex);
-            setTurnTimer(10);
-          };
-
-          // Add player
-          const addPlayer = (name) => {
-            if (players.length < gameSettings.playerCount) {
-              setPlayers([...players, {
-                id: players.length + 1,
-                name: name || `שחקן ${players.length + 1}`,
-                totalScore: 0,
-                eliminated: false,
-                lastRoll: null
-              }]);
-              
-              if (players.length + 1 === gameSettings.playerCount) {
-                setScreen('game');
-                setTurnTimer(10);
-              }
-            }
-          };
-
-          // Player position
           const getPlayerPosition = (index, total) => {
             const angle = (index * 360) / Math.min(total, 10);
-            const radius = 45;
+            const radius = window.innerWidth < 768 ? 35 : 45;
             const x = 50 + radius * Math.cos((angle - 90) * Math.PI / 180);
             const y = 50 + radius * Math.sin((angle - 90) * Math.PI / 180);
             return { x: `${x}%`, y: `${y}%` };
           };
 
-          // Avatars and colors
           const avatarEmojis = [
             '🧑‍💼', '👩‍🦰', '🧑‍🎨', '👨‍🏫', '👩‍⚕️', 
             '🧑‍🚀', '👩‍🎤', '👨‍🍳', '👩‍🔬', '🧑‍🎮'
@@ -300,7 +445,7 @@
           ];
 
           return (
-            <div className="min-h-screen bg-gradient-to-br from-green-800 to-green-900 flex items-center justify-center p-4" dir="rtl">
+            <div className="min-h-screen bg-gradient-to-br from-green-800 to-green-900 flex items-center justify-center p-2 sm:p-4" dir="rtl">
               <audio 
                 ref={audioRef} 
                 preload="auto"
@@ -309,135 +454,155 @@
 
               {/* Welcome Screen */}
               {screen === 'welcome' && (
-                <div className="text-center bg-white rounded-xl p-8 shadow-2xl max-w-md w-full">
-                  <h1 className="text-4xl font-bold text-green-800 mb-6">🎲</h1>
-                  <h2 className="text-3xl font-bold text-gray-800 mb-8">משחק הקוביות של נועם</h2>
-                  <button 
-                    onClick={() => setScreen('setup')}
-                    className="bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-8 rounded-lg text-xl w-full transition-colors"
-                  >
-                    התחל משחק
-                  </button>
-                  <button 
-                    onClick={() => alert('הוראות המשחק:\n• כל שחקן בתורו זורק 5 קוביות\n• 10 שניות לכל תור\n• משחק 1: השחקן עם הניקוד הנמוך נפסל\n• משחק 2: 5 סיבובים, מנצח עם הניקוד הגבוה')}
-                    className="mt-4 text-green-600 hover:text-green-700 underline"
-                  >
-                    הוראות משחק
-                  </button>
+                <div className="text-center bg-white rounded-xl p-6 sm:p-8 shadow-2xl max-w-md w-full mx-2">
+                  <h1 className="text-3xl sm:text-4xl font-bold text-green-800 mb-4 sm:mb-6">🎲</h1>
+                  <h2 className="text-2xl sm:text-3xl font-bold text-gray-800 mb-6 sm:mb-8">משחק הקוביות של נועם</h2>
+                  
+                  <div className="space-y-4">
+                    <input 
+                      type="text"
+                      placeholder="הכנס את שמך"
+                      value={playerName}
+                      onChange={(e) => setPlayerName(e.target.value)}
+                      className="w-full p-3 border rounded-lg text-center text-lg"
+                    />
+                    
+                    <button 
+                      onClick={() => setScreen('setup')}
+                      disabled={!playerName.trim()}
+                      className="bg-green-600 hover:bg-green-700 disabled:bg-gray-400 text-white font-bold py-3 px-6 rounded-lg text-lg sm:text-xl w-full transition-colors"
+                    >
+                      צור שולחן חדש
+                    </button>
+                    
+                    <div className="text-gray-500 font-bold">או</div>
+                    
+                    <input 
+                      type="text"
+                      placeholder="קוד שולחן (6 תווים)"
+                      value={gameId}
+                      onChange={(e) => setGameId(e.target.value.toLowerCase())}
+                      className="w-full p-3 border rounded-lg text-center text-lg font-mono"
+                      maxLength={9}
+                    />
+                    
+                    <button 
+                      onClick={() => joinGame(gameId, playerName)}
+                      disabled={!playerName.trim() || !gameId.trim()}
+                      className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white font-bold py-3 px-6 rounded-lg text-lg w-full transition-colors"
+                    >
+                      הצטרף לשולחן
+                    </button>
+                  </div>
                 </div>
               )}
 
               {/* Setup Screen */}
               {screen === 'setup' && (
-                <div className="text-center bg-white rounded-xl p-8 shadow-2xl max-w-md w-full">
-                  <h2 className="text-2xl font-bold text-gray-800 mb-6">הגדרת משחק</h2>
+                <div className="text-center bg-white rounded-xl p-6 sm:p-8 shadow-2xl max-w-md w-full mx-2">
+                  <h2 className="text-xl sm:text-2xl font-bold text-gray-800 mb-4 sm:mb-6">הגדרת שולחן חדש</h2>
                   
-                  {isFirstPlayer && (
-                    <>
-                      <div className="mb-6">
-                        <label className="block text-gray-700 font-bold mb-2">כמות שחקנים</label>
-                        <select 
-                          value={gameSettings.playerCount}
-                          onChange={(e) => setGameSettings({...gameSettings, playerCount: parseInt(e.target.value)})}
-                          className="w-full p-3 border rounded-lg text-center"
-                        >
-                          {[2,3,4,5,6,7,8,9].map(n => (
-                            <option key={n} value={n}>{n} שחקנים</option>
-                          ))}
-                        </select>
-                      </div>
-                      
-                      <div className="mb-6">
-                        <label className="block text-gray-700 font-bold mb-2">סוג משחק</label>
-                        <select 
-                          value={gameSettings.gameType}
-                          onChange={(e) => setGameSettings({...gameSettings, gameType: parseInt(e.target.value)})}
-                          className="w-full p-3 border rounded-lg text-center"
-                        >
-                          <option value={1}>שחקן מול שחקן (קוביות שחקנים)</option>
-                          <option value={2}>5 סיבובים (ללא הדחה)</option>
-                          <option value={3} disabled>הימורים (לא פעיל)</option>
-                        </select>
-                      </div>
-                    </>
-                  )}
+                  <div className="space-y-4 sm:space-y-6">
+                    <div>
+                      <label className="block text-gray-700 font-bold mb-2">כמות שחקנים</label>
+                      <select 
+                        value={gameSettings.playerCount}
+                        onChange={(e) => setGameSettings({...gameSettings, playerCount: parseInt(e.target.value)})}
+                        className="w-full p-3 border rounded-lg text-center text-lg"
+                      >
+                        {[2,3,4,5,6,7,8,9].map(n => (
+                          <option key={n} value={n}>{n} שחקנים</option>
+                        ))}
+                      </select>
+                    </div>
+                    
+                    <div>
+                      <label className="block text-gray-700 font-bold mb-2">סוג משחק</label>
+                      <select 
+                        value={gameSettings.gameType}
+                        onChange={(e) => setGameSettings({...gameSettings, gameType: parseInt(e.target.value)})}
+                        className="w-full p-3 border rounded-lg text-center text-lg"
+                      >
+                        <option value={1}>שחקן מול שחקן (עם הדחה)</option>
+                        <option value={2}>5 סיבובים (ללא הדחה)</option>
+                      </select>
+                    </div>
+                    
+                    <button 
+                      onClick={() => createGame(gameSettings, playerName)}
+                      className="bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-lg text-lg w-full transition-colors"
+                    >
+                      צור שולחן
+                    </button>
+                    
+                    <button 
+                      onClick={() => setScreen('welcome')}
+                      className="bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg w-full transition-colors"
+                    >
+                      חזור
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Waiting Screen */}
+              {screen === 'waiting' && (
+                <div className="text-center bg-white rounded-xl p-6 sm:p-8 shadow-2xl max-w-md w-full mx-2">
+                  <h2 className="text-xl sm:text-2xl font-bold text-gray-800 mb-4 sm:mb-6">ממתין לשחקנים</h2>
                   
-                  <div className="mb-6">
-                    <label className="block text-gray-700 font-bold mb-2">שם השחקן</label>
-                    <input 
-                      type="text"
-                      placeholder="הכנס את שמך"
-                      className="w-full p-3 border rounded-lg text-center"
-                      onKeyPress={(e) => {
-                        if (e.key === 'Enter' && e.target.value.trim()) {
-                          addPlayer(e.target.value.trim());
-                          e.target.value = '';
-                          if (players.length + 1 < gameSettings.playerCount) {
-                            setIsFirstPlayer(false);
-                          }
-                        }
-                      }}
-                    />
+                  <div className="bg-gray-100 p-4 rounded-lg mb-4">
+                    <p className="text-sm text-gray-600 mb-2">קוד השולחן:</p>
+                    <p className="text-2xl font-mono font-bold text-green-600">{gameId}</p>
+                    <p className="text-xs text-gray-500 mt-2">שתף את הקוד עם שחקנים אחרים</p>
                   </div>
                   
-                  <button 
-                    onClick={(e) => {
-                      const input = e.target.parentElement.querySelector('input');
-                      if (input.value.trim()) {
-                        addPlayer(input.value.trim());
-                        input.value = '';
-                        if (players.length + 1 < gameSettings.playerCount) {
-                          setIsFirstPlayer(false);
-                        }
-                      }
-                    }}
-                    className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-8 rounded-lg w-full mb-4 transition-colors"
-                  >
-                    {players.length === 0 ? 'יצירת שולחן' : 'הצטרפות לשולחן'}
-                  </button>
-                  
-                  {players.length > 0 && (
-                    <div className="text-gray-600">
+                  <div className="mb-6">
+                    <p className="text-lg font-bold mb-2">
                       שחקנים: {players.length}/{gameSettings.playerCount}
-                      <div className="mt-2">
-                        {players.map(p => <div key={p.id} className="text-sm">{p.name}</div>)}
-                      </div>
-                      {players.length < gameSettings.playerCount && (
-                        <div className="text-sm text-blue-600 mt-2">
-                          ממתין לעוד {gameSettings.playerCount - players.length} שחקנים...
+                    </p>
+                    <div className="space-y-2">
+                      {players.map((player, index) => (
+                        <div key={player.id} className="flex items-center justify-center gap-2">
+                          <span className="text-2xl">{avatarEmojis[index]}</span>
+                          <span className="font-medium">{player.name}</span>
+                          {player.isHost && <span className="text-xs bg-yellow-200 px-2 py-1 rounded">מארח</span>}
                         </div>
-                      )}
+                      ))}
                     </div>
-                  )}
+                  </div>
+                  
+                  <div className="text-sm text-gray-600">
+                    ממתין לעוד {gameSettings.playerCount - players.length} שחקנים...
+                  </div>
                 </div>
               )}
 
               {/* Game Screen */}
               {screen === 'game' && (
-                <div className="w-full max-w-6xl mx-auto">
-                  <div className="absolute top-4 left-4 z-10">
+                <div className="w-full max-w-6xl mx-auto px-2">
+                  <div className="absolute top-2 left-2 z-10">
                     <button
                       onClick={() => setSoundEnabled(!soundEnabled)}
-                      className="bg-white rounded-full p-3 shadow-lg hover:shadow-xl transition-shadow"
+                      className="bg-white rounded-full p-2 sm:p-3 shadow-lg hover:shadow-xl transition-shadow"
                     >
                       <VolumeIcon enabled={soundEnabled} />
                     </button>
                   </div>
 
-                  <div className="text-center text-white mb-6 relative">
-                    <h2 className="text-2xl font-bold">
+                  <div className="text-center text-white mb-4 sm:mb-6 relative">
+                    <h2 className="text-xl sm:text-2xl font-bold">
                       סיבוב {gameRound}
                       {gameSettings.gameType === 2 && <span className="text-yellow-300"> / 5</span>}
                     </h2>
-                    <p>תור: {players[currentPlayerIndex]?.name}</p>
-                    {!isRolling && (
-                      <div className={`absolute left-8 top-1/2 transform -translate-y-1/2 text-lg font-bold ${turnTimer <= 3 ? 'text-red-400 animate-pulse' : 'text-yellow-300'}`}>
-                        ⏰ {turnTimer} שניות
+                    <p className="text-sm sm:text-base">תור: {players[currentPlayerIndex]?.name}</p>
+                    {!isRolling && players[currentPlayerIndex]?.id === playerId && (
+                      <div className={`absolute left-4 sm:left-8 top-1/2 transform -translate-y-1/2 text-sm sm:text-lg font-bold ${turnTimer <= 3 ? 'text-red-400 animate-pulse' : 'text-yellow-300'}`}>
+                        ⏰ {turnTimer}
                       </div>
                     )}
                   </div>
 
-                  <div className="relative w-full h-96 bg-green-600 rounded-full border-8 border-yellow-600 shadow-2xl mx-auto max-w-4xl">
+                  <div className={`relative w-full game-table bg-green-600 rounded-full border-4 sm:border-8 border-yellow-600 shadow-2xl mx-auto`} style={{height: window.innerWidth < 768 ? '300px' : '384px', maxWidth: window.innerWidth < 768 ? '350px' : '64rem'}}>
                     {players.map((player, index) => {
                       const pos = getPlayerPosition(index, players.length);
                       const isCurrentPlayer = index === currentPlayerIndex;
@@ -449,28 +614,28 @@
                           } ${isCurrentPlayer ? 'scale-110 z-10' : ''} transition-all duration-500`}
                           style={{ left: pos.x, top: pos.y }}
                         >
-                          <div className={`w-24 h-24 ${avatarGradients[index]} rounded-full flex items-center justify-center text-4xl mb-2 shadow-lg border-4 border-white ${
-                            isCurrentPlayer ? 'ring-8 ring-yellow-400 ring-opacity-80 player-glow transform scale-110' : 'ring-2 ring-white ring-opacity-50'
+                          <div className={`player-avatar w-16 h-16 sm:w-24 sm:h-24 ${avatarGradients[index]} rounded-full flex items-center justify-center text-2xl sm:text-4xl mb-1 sm:mb-2 shadow-lg border-2 sm:border-4 border-white ${
+                            isCurrentPlayer ? 'ring-4 sm:ring-8 ring-yellow-400 ring-opacity-80 player-glow transform scale-110' : 'ring-1 sm:ring-2 ring-white ring-opacity-50'
                           } transition-all duration-500 hover:scale-105`}>
                             {avatarEmojis[index]}
                           </div>
-                          <div className={`text-white text-base font-bold ${isCurrentPlayer ? 'text-yellow-300' : ''}`}>
+                          <div className={`text-white text-xs sm:text-base font-bold ${isCurrentPlayer ? 'text-yellow-300' : ''}`}>
                             {player.name}
                           </div>
-                          <div className="text-yellow-300 text-base font-bold">{player.totalScore} נק'</div>
+                          <div className="text-yellow-300 text-xs sm:text-base font-bold">{player.totalScore} נק'</div>
                           {player.lastRoll && (
                             <>
-                              <div className="flex gap-1 justify-center mb-2 -mt-12">
+                              <div className="flex gap-1 justify-center mb-1 sm:mb-2 -mt-8 sm:-mt-12">
                                 {player.lastRoll.dice.map((dice, diceIndex) => (
                                   <div
                                     key={diceIndex}
-                                    className="w-8 h-8 bg-white rounded-md text-black text-base flex items-center justify-center font-bold border-2 border-gray-400 shadow-lg transform hover:scale-110 transition-transform duration-200"
+                                    className="player-dice w-6 h-6 sm:w-8 sm:h-8 bg-white rounded text-black text-xs sm:text-base flex items-center justify-center font-bold border border-gray-400 shadow-lg transform hover:scale-110 transition-transform duration-200"
                                   >
                                     {dice}
                                   </div>
                                 ))}
                               </div>
-                              <div className="text-sm text-gray-200 mt-1">
+                              <div className="text-xs sm:text-sm text-gray-200 mt-1">
                                 {player.lastRoll.combination}<br/>
                                 +{player.lastRoll.score}
                               </div>
@@ -482,11 +647,11 @@
 
                     <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2">
                       {diceResults.length > 0 && (
-                        <div className="flex gap-3 mb-6 justify-center">
+                        <div className="flex gap-2 sm:gap-3 mb-4 sm:mb-6 justify-center">
                           {diceResults.map((dice, index) => (
                             <div
                               key={index}
-                              className={`w-16 h-16 bg-white rounded-xl flex items-center justify-center text-3xl font-bold border-3 border-gray-400 shadow-2xl transform transition-all duration-300 ${
+                              className={`dice-main w-12 h-12 sm:w-16 sm:h-16 bg-white rounded-lg sm:rounded-xl flex items-center justify-center text-xl sm:text-3xl font-bold border-2 sm:border-3 border-gray-400 shadow-2xl transform transition-all duration-300 ${
                                 isRolling ? 'dice-roll scale-110' : 'hover:scale-105'
                               }`}
                               style={{
@@ -502,18 +667,24 @@
                         </div>
                       )}
                       
-                      {!isRolling && (
+                      {!isRolling && players[currentPlayerIndex]?.id === playerId && (
                         <button
                           onClick={rollDice}
-                          className="bg-gradient-to-r from-red-500 to-red-700 hover:from-red-600 hover:to-red-800 text-white font-bold py-4 px-8 rounded-xl shadow-lg transition-all duration-300 transform hover:scale-105 hover:shadow-2xl"
+                          className="bg-gradient-to-r from-red-500 to-red-700 hover:from-red-600 hover:to-red-800 text-white font-bold py-2 px-4 sm:py-4 sm:px-8 rounded-lg sm:rounded-xl shadow-lg transition-all duration-300 transform hover:scale-105 hover:shadow-2xl text-sm sm:text-base"
                         >
-                          <span className="text-2xl mr-2">🎲</span>
+                          <span className="text-lg sm:text-2xl mr-2">🎲</span>
                           זרוק קוביות
                         </button>
                       )}
                       
+                      {!isRolling && players[currentPlayerIndex]?.id !== playerId && (
+                        <div className="text-white font-bold text-sm sm:text-xl bg-black bg-opacity-50 rounded-lg px-4 py-2 sm:px-6 sm:py-3">
+                          תור של {players[currentPlayerIndex]?.name}
+                        </div>
+                      )}
+                      
                       {isRolling && (
-                        <div className="text-white font-bold text-xl animate-pulse bg-black bg-opacity-50 rounded-lg px-6 py-3">
+                        <div className="text-white font-bold text-sm sm:text-xl animate-pulse bg-black bg-opacity-50 rounded-lg px-4 py-2 sm:px-6 sm:py-3">
                           <span className="animate-bounce inline-block">🎲</span>
                           <span className="mx-2">זורק קוביות...</span>
                           <span className="animate-bounce inline-block" style={{animationDelay: '0.2s'}}>🎲</span>
@@ -523,10 +694,10 @@
                   </div>
 
                   {players[currentPlayerIndex]?.lastRoll && (
-                    <div className="text-center text-white mt-6 bg-black bg-opacity-50 rounded-lg p-4 max-w-md mx-auto">
-                      <h3 className="text-xl font-bold">{players[currentPlayerIndex].lastRoll.combination}</h3>
-                      <p className="text-lg">+{players[currentPlayerIndex].lastRoll.score} נקודות</p>
-                      <p className="text-sm opacity-75">סה"כ: {players[currentPlayerIndex].totalScore} נקודות</p>
+                    <div className="text-center text-white mt-4 sm:mt-6 bg-black bg-opacity-50 rounded-lg p-3 sm:p-4 max-w-sm sm:max-w-md mx-auto">
+                      <h3 className="text-lg sm:text-xl font-bold">{players[currentPlayerIndex].lastRoll.combination}</h3>
+                      <p className="text-sm sm:text-lg">+{players[currentPlayerIndex].lastRoll.score} נקודות</p>
+                      <p className="text-xs sm:text-sm opacity-75">סה"כ: {players[currentPlayerIndex].totalScore} נקודות</p>
                     </div>
                   )}
                 </div>
@@ -534,9 +705,9 @@
 
               {/* Game Over Screen */}
               {screen === 'gameOver' && (
-                <div className="text-center bg-white rounded-xl p-8 shadow-2xl max-w-md w-full">
-                  <h1 className="text-6xl mb-4">🏆</h1>
-                  <h2 className="text-3xl font-bold text-yellow-600 mb-4">
+                <div className="text-center bg-white rounded-xl p-6 sm:p-8 shadow-2xl max-w-md w-full mx-2">
+                  <h1 className="text-4xl sm:text-6xl mb-4">🏆</h1>
+                  <h2 className="text-2xl sm:text-3xl font-bold text-yellow-600 mb-4">
                     {gameSettings.gameType === 1 
                       ? players.find(p => !p.eliminated)?.name 
                       : (() => {
@@ -547,28 +718,38 @@
                         })()
                     }
                   </h2>
-                  <p className="text-xl text-gray-700 mb-2">מנצח!</p>
-                  <p className="text-lg text-gray-600 mb-6">
+                  <p className="text-lg sm:text-xl text-gray-700 mb-2">מנצח!</p>
+                  <p className="text-base sm:text-lg text-gray-600 mb-6">
                     ניקוד סופי: {gameSettings.gameType === 1 
                       ? players.find(p => !p.eliminated)?.totalScore 
                       : Math.max(...players.filter(p => !p.eliminated).map(p => p.totalScore))
                     } נקודות
                   </p>
-                  <button
-                    onClick={() => {
-                      setScreen('welcome');
-                      setPlayers([]);
-                      setCurrentPlayerIndex(0);
-                      setGameRound(1);
-                      setDiceResults([]);
-                      setIsFirstPlayer(true);
-                      setTurnTimer(10);
-                    }}
-                    className="bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-8 rounded-lg w-full transition-colors flex items-center justify-center gap-2"
-                  >
-                    <RotateIcon />
-                    משחק חדש
-                  </button>
+                  
+                  <div className="space-y-3">
+                    <button
+                      onClick={() => {
+                        setScreen('welcome');
+                        setGameId('');
+                        setPlayerId('');
+                        setPlayerName('');
+                        setGameData(null);
+                        setPlayers([]);
+                        if (gameRef.current) {
+                          gameRef.current.off();
+                          gameRef.current = null;
+                        }
+                      }}
+                      className="bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-lg w-full transition-colors flex items-center justify-center gap-2 text-sm sm:text-base"
+                    >
+                      <RotateIcon />
+                      משחק חדש
+                    </button>
+                    
+                    <div className="text-xs sm:text-sm text-gray-500">
+                      קוד השולחן: {gameId}
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
