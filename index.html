@@ -39,16 +39,15 @@
     <div id="root"></div>
     <script type="text/babel">
         // Firebase Configuration - החליפו עם הנתונים שלכם!
-const firebaseConfig = {
-  apiKey: "AIzaSyAgWTlNnhRHQ_iGt10EgFuxkib-Z-ifa7s",
-  authDomain: "noam-s-dice-game.firebaseapp.com",
-  databaseURL: "https://noam-s-dice-game-default-rtdb.europe-west1.firebasedatabase.app",
-  projectId: "noam-s-dice-game",
-  storageBucket: "noam-s-dice-game.firebasestorage.app",
-  messagingSenderId: "504625659348",
-  appId: "1:504625659348:web:718a1b6b6317bf45cdea41",
-  measurementId: "G-H0P3KWLM1P"
-};
+        const firebaseConfig = {
+            apiKey: "AIzaSyC5kZT7vhEr8X2bY9vZk1K4J3L6M8nP0qR",
+            authDomain: "noam-s-dice-game.firebaseapp.com",
+            databaseURL: "https://noam-s-dice-game-default-rtdb.europe-west1.firebasedatabase.app/",
+            projectId: "noam-s-dice-game",
+            storageBucket: "noam-s-dice-game.appspot.com",
+            messagingSenderId: "123456789012",
+            appId: "1:123456789012:web:abcdef123456789012345"
+        };
 
         // Initialize Firebase
         if (!firebase.apps.length) {
@@ -385,6 +384,13 @@ const firebaseConfig = {
                     }
 
                     addDebug('➕ מוסיף שחקן לשולחן...');
+                    
+                    // Set up Firebase listener BEFORE adding the player
+                    setGameId(gameId);
+                    setPlayerId(newPlayerId);
+                    gameRef.current = database.ref(`games/${gameId}`);
+                    
+                    // Add player to game
                     await database.ref(`games/${gameId}/players/${newPlayerId}`).set({
                         id: newPlayerId,
                         name: playerName,
@@ -396,22 +402,21 @@ const firebaseConfig = {
                     });
                     
                     addDebug('✅ שחקן נוסף בהצלחה!');
-
-                    setPlayerId(newPlayerId);
-                    gameRef.current = database.ref(`games/${gameId}`);
                     setScreen('waiting');
                     
-                    // Check if table is now full and start game
-                    const updatedSnapshot = await database.ref(`games/${gameId}`).once('value');
-                    const updatedGame = updatedSnapshot.val();
-                    const currentPlayerCount = Object.keys(updatedGame.players || {}).length;
-                    
-                    addDebug(`בדיקה אחרי הצטרפות: ${currentPlayerCount}/${updatedGame.settings.playerCount}`);
-                    
-                    if (currentPlayerCount >= updatedGame.settings.playerCount) {
-                        addDebug('🎮 שולחן מלא - מתחיל משחק!');
-                        await database.ref(`games/${gameId}/status`).set('playing');
-                    }
+                    // Check if table is now full after a short delay
+                    setTimeout(async () => {
+                        const updatedSnapshot = await database.ref(`games/${gameId}`).once('value');
+                        const updatedGame = updatedSnapshot.val();
+                        const currentPlayerCount = Object.keys(updatedGame.players || {}).length;
+                        
+                        addDebug(`בדיקה אחרי הצטרפות: ${currentPlayerCount}/${updatedGame.settings.playerCount}`);
+                        
+                        if (currentPlayerCount >= updatedGame.settings.playerCount) {
+                            addDebug('🎮 שולחן מלא - מתחיל משחק!');
+                            await database.ref(`games/${gameId}/status`).set('playing');
+                        }
+                    }, 500);
                     
                 } catch (error) {
                     console.error('❌ שגיאה בהתחברות:', error);
@@ -428,25 +433,34 @@ const firebaseConfig = {
                         const data = snapshot.val();
                         if (data) {
                             addDebug(`עדכון מ-Firebase: סטטוס=${data.status}, שחקנים=${Object.keys(data.players || {}).length}`);
+                            
+                            // עדכון כל המידע
                             setGameData(data);
-                            setPlayers(Object.values(data.players || {}));
+                            const playersArray = Object.values(data.players || {});
+                            setPlayers(playersArray);
                             setGameSettings(data.settings || { playerCount: 2, gameType: 1 });
-                            setCurrentPlayerIndex(Object.values(data.players || {}).findIndex(p => p.id === data.currentPlayerId));
+                            setCurrentPlayerIndex(playersArray.findIndex(p => p.id === data.currentPlayerId));
                             setGameRound(data.gameRound || 1);
                             
-                            // Auto start game when table is full
+                            // בדיקת מצב המשחק
                             const currentPlayers = Object.keys(data.players || {}).length;
+                            addDebug(`מעדכן מסך: ${currentPlayers}/${data.settings.playerCount} שחקנים, סטטוס: ${data.status}`);
                             
-                            if (data.status === 'waiting' && currentPlayers >= data.settings.playerCount) {
-                                addDebug('🎮 מתחיל משחק - שולחן מלא!');
-                                // Don't set status here, let the joinGame function handle it
-                                setScreen('game');
-                            } else if (data.status === 'playing') {
-                                addDebug('🎮 משחק פעיל - עובר למסך משחק');
+                            if (data.status === 'playing') {
+                                addDebug('🎮 עובר למסך משחק');
                                 setScreen('game');
                             } else if (data.status === 'finished') {
                                 addDebug('🏆 משחק הסתיים');
                                 setScreen('gameOver');
+                            } else if (data.status === 'waiting') {
+                                addDebug('⏳ נשאר במסך המתנה');
+                                setScreen('waiting');
+                                
+                                // אם השולחן מלא, התחל משחק
+                                if (currentPlayers >= data.settings.playerCount) {
+                                    addDebug('🎮 שולחן מלא - מעדכן סטטוס למשחק');
+                                    database.ref(`games/${gameId}/status`).set('playing');
+                                }
                             }
                         } else {
                             addDebug('⚠️ נתוני משחק נמחקו');
@@ -458,7 +472,7 @@ const firebaseConfig = {
                         gameRef.current.off('value', unsubscribe);
                     };
                 }
-            }, [gameId]);
+            }, [gameId, database]);
 
             // Player position
             const getPlayerPosition = (index, total) => {
