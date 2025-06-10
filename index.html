@@ -59,56 +59,7 @@ const firebaseConfig = {
             console.error("❌ Firebase error:", error);
         }
 
-        const DiceGame = () => {
-            const [screen, setScreen] = useState('welcome');
-            const [playerName, setPlayerName] = useState('');
-            const [gameId, setGameId] = useState('');
-            const [playerId, setPlayerId] = useState('');
-            const [gameSettings, setGameSettings] = useState({ playerCount: 2, gameType: 1 });
-            const [players, setPlayers] = useState([]);
-            const [currentPlayerIndex, setCurrentPlayerIndex] = useState(0);
-            const [gameRound, setGameRound] = useState(1);
-            const [isRolling, setIsRolling] = useState(false);
-            const [diceResults, setDiceResults] = useState([]);
-            const [soundEnabled, setSoundEnabled] = useState(true);
-            const [turnTimer, setTurnTimer] = useState(10);
-            const [gameData, setGameData] = useState(null);
-            
-            const gameRef = useRef(null);
-            const audioRef = useRef(null);
-
-            const generateId = () => Math.random().toString(36).substr(2, 9);
-
-            const calculateScore = (dice) => {
-                const counts = {};
-                dice.forEach(d => counts[d] = (counts[d] || 0) + 1);
-                const values = Object.values(counts).sort((a,b) => b-a);
-                const sortedDice = [...dice].sort((a,b) => a-b);
-                
-                if (values[0] === 5) return 5000 * dice[0];
-                if (sortedDice.join('') === '12345' || sortedDice.join('') === '23456') return 10000;
-                if (values[0] === 4) {
-                    const num = Object.keys(counts).find(k => counts[k] === 4);
-                    return 1500 * parseInt(num);
-                }
-                if (values[0] === 3 && values[1] === 2) {
-                    const threeNum = Object.keys(counts).find(k => counts[k] === 3);
-                    return 500 * parseInt(threeNum);
-                }
-                if (values[0] === 3) {
-                    const threeNum = Object.keys(counts).find(k => counts[k] === 3);
-                    return 250 * parseInt(threeNum);
-                }
-                if (values[0] === 2 && values[1] === 2) {
-                    const pairs = Object.keys(counts).filter(k => counts[k] === 2).map(Number);
-                    return 100 * Math.max(...pairs);
-                }
-                if (values[0] === 2) {
-                    const pairNum = Object.keys(counts).find(k => counts[k] === 2);
-                    return 10 * parseInt(pairNum);
-                }
-                return dice.reduce((sum, d) => sum + d, 0);
-            };
+   
 
             const getScoreCombination = (dice) => {
                 const counts = {};
