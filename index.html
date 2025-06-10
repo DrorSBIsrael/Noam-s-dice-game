@@ -153,12 +153,20 @@ const firebaseConfig = {
                     const unsubscribe = gameRef.current.on('value', (snapshot) => {
                         const data = snapshot.val();
                         if (data) {
+                            console.log('עדכון מ-Firebase:', data);
                             setPlayers(Object.values(data.players || {}));
                             setGameSettings(data.settings || { playerCount: 2, gameType: 1 });
                             
                             // Auto start game when table is full
-                            if (data.status === 'waiting' && Object.keys(data.players || {}).length >= data.settings.playerCount) {
+                            const currentPlayers = Object.keys(data.players || {}).length;
+                            console.log(`שחקנים: ${currentPlayers}/${data.settings.playerCount}`);
+                            
+                            if (data.status === 'waiting' && currentPlayers >= data.settings.playerCount) {
+                                console.log('מתחיל משחק - שולחן מלא!');
                                 database.ref(`games/${gameId}/status`).set('playing');
+                                setScreen('game');
+                            } else if (data.status === 'playing') {
+                                console.log('משחק פעיל - עובר למסך משחק');
                                 setScreen('game');
                             }
                         }
@@ -303,7 +311,11 @@ const firebaseConfig = {
                             </div>
                             
                             <div className="text-sm text-gray-600 mb-4">
-                                ממתין לעוד {gameSettings.playerCount - players.length} שחקנים...
+                                {players.length < gameSettings.playerCount ? (
+                                    <>ממתין לעוד {gameSettings.playerCount - players.length} שחקנים...</>
+                                ) : (
+                                    <span className="text-green-600 font-bold">מתחיל משחק...</span>
+                                )}
                             </div>
                             
                             <button
