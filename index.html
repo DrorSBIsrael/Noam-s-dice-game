@@ -1,4 +1,8 @@
-<!DOCTYPE html>
+const updateTimer = async (newTimer) => {
+            if (gameRef.current) {
+              await gameRef.current.child('turnTimer').set(newTimer);
+            }
+          };<!DOCTYPE html>
 <html lang="he" dir="rtl">
 <head>
     <meta charset="UTF-8">
@@ -292,10 +296,25 @@ const firebaseConfig = {
             }
           };
 
-          const updateTimer = async (newTimer) => {
-            if (gameRef.current) {
-              await gameRef.current.child('turnTimer').set(newTimer);
+          const resetGame = async () => {
+            if (!gameRef.current) return;
+            
+            // Reset all players
+            for (const player of players) {
+              await gameRef.current.child(`players/${player.id}`).update({
+                totalScore: 0,
+                eliminated: false,
+                lastRoll: null
+              });
             }
+            
+            // Reset game state
+            await gameRef.current.update({
+              currentPlayerIndex: 0,
+              gameRound: 1,
+              turnTimer: 10,
+              status: 'playing'
+            });
           };
 
           const rollDice = async () => {
