@@ -548,19 +548,17 @@ const firebaseConfig = {
                         src="data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEUATR2y/LPfOcFKnHM8dmINgkRbL3tqW8aBDNEn9/us2QZNB9B"
                     />
 
-                    {/* Debug Panel - מוסתר בייצור */}
-                    {false && (
-                        <div className="fixed top-4 right-4 bg-black bg-opacity-75 text-white p-2 rounded text-xs max-w-xs max-h-48 overflow-y-auto z-50">
-                            <div className="font-bold mb-1">Debug Info:</div>
-                            <pre className="whitespace-pre-wrap">{debugInfo}</pre>
-                            <button 
-                                onClick={() => setDebugInfo('')}
-                                className="mt-2 bg-red-500 px-2 py-1 rounded text-xs"
-                            >
-                                Clear
-                            </button>
-                        </div>
-                    )}
+                    {/* Debug Panel - shows debug info */}
+                    <div className="fixed top-4 right-4 bg-black bg-opacity-75 text-white p-2 rounded text-xs max-w-xs max-h-48 overflow-y-auto z-50">
+                        <div className="font-bold mb-1">Debug Info:</div>
+                        <pre className="whitespace-pre-wrap">{debugInfo}</pre>
+                        <button 
+                            onClick={() => setDebugInfo('')}
+                            className="mt-2 bg-red-500 px-2 py-1 rounded text-xs"
+                        >
+                            Clear
+                        </button>
+                    </div>
 
                     {/* Welcome Screen */}
                     {screen === 'welcome' && (
