@@ -78,6 +78,7 @@ const firebaseConfig = {
   appId: "1:504625659348:web:718a1b6b6317bf45cdea41",
   measurementId: "G-H0P3KWLM1P"
 };
+
         // Initialize Firebase
         if (!firebase.apps.length) {
             firebase.initializeApp(firebaseConfig);
@@ -209,6 +210,39 @@ const firebaseConfig = {
             setPlayerId(newPlayerId);
             gameRef.current = database.ref(`games/${newGameId}`);
             setScreen('waiting');
+          };
+
+          const resetGame = async () => {
+            if (!gameRef.current) return;
+            
+            // Reset all players
+            for (const player of players) {
+              await gameRef.current.child(`players/${player.id}`).update({
+                totalScore: 0,
+                eliminated: false,
+                lastRoll: null
+              });
+            }
+            
+            // Reset game state
+            await gameRef.current.update({
+              currentPlayerIndex: 0,
+              gameRound: 1,
+              turnTimer: 10,
+              status: 'playing'
+            });
+          };
+
+          const deleteGame = async () => {
+            if (gameRef.current) {
+              await gameRef.current.remove();
+              setScreen('welcome');
+              setGameId('');
+              setPlayerId('');
+              setGameData(null);
+              setPlayers([]);
+              gameRef.current = null;
+            }
           };
 
           const joinGame = async (gameIdToJoin, playerNameToJoin) => {
@@ -600,16 +634,7 @@ const firebaseConfig = {
                     <button
                       onClick={() => {
                         if (confirm('האם אתה בטוח שברצונך לאפס את השולחן?')) {
-                          // Delete the entire game
-                          if (gameRef.current) {
-                            gameRef.current.remove();
-                            setScreen('welcome');
-                            setGameId('');
-                            setPlayerId('');
-                            setGameData(null);
-                            setPlayers([]);
-                            gameRef.current = null;
-                          }
+                          deleteGame();
                         }
                       }}
                       className="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-lg text-sm transition-colors"
