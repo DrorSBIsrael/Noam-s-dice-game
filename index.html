@@ -28,12 +28,17 @@
         .dice-roll {
             animation: diceRoll 0.1s linear infinite;
         }
+        @keyframes gradient {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
     </style>
 </head>
 <body>
     <div id="root"></div>
     <script type="text/babel">
-        // Firebase Configuration - החלף עם הקונפיגורציה שלך
+        // Firebase Configuration - **חובה להחליף עם הנתונים שלכם!**
 const firebaseConfig = {
   apiKey: "AIzaSyAgWTlNnhRHQ_iGt10EgFuxkib-Z-ifa7s",
   authDomain: "noam-s-dice-game.firebaseapp.com",
@@ -60,19 +65,227 @@ const firebaseConfig = {
             const [playerId, setPlayerId] = useState('');
             const [gameSettings, setGameSettings] = useState({ playerCount: 2, gameType: 1 });
             const [players, setPlayers] = useState([]);
+            const [currentPlayerIndex, setCurrentPlayerIndex] = useState(0);
+            const [gameRound, setGameRound] = useState(1);
+            const [isRolling, setIsRolling] = useState(false);
+            const [diceResults, setDiceResults] = useState([]);
+            const [soundEnabled, setSoundEnabled] = useState(true);
+            const [turnTimer, setTurnTimer] = useState(10);
+            const [gameData, setGameData] = useState(null);
             
             const gameRef = useRef(null);
+            const audioRef = useRef(null);
 
             // Generate unique IDs
             const generateId = () => Math.random().toString(36).substr(2, 9);
+
+            // Timer effect
+            useEffect(() => {
+                let interval = null;
+                if (screen === 'game' && turnTimer > 0 && !isRolling && gameData && gameData.currentPlayerId === playerId) {
+                    interval = setInterval(() => {
+                        setTurnTimer(timer => {
+                            if (timer <= 1) {
+                                rollDice();
+                                return 10;
+                            }
+                            return timer - 1;
+                        });
+                    }, 1000);
+                }
+                return () => clearInterval(interval);
+            }, [screen, turnTimer, isRolling, gameData, playerId]);
+
+            // Sound effects
+            const playDiceSound = () => {
+                if (soundEnabled && audioRef.current) {
+                    audioRef.current.currentTime = 0;
+                    audioRef.current.play().catch(e => console.log('Sound play failed:', e));
+                }
+            };
+
+            // Calculate score functions
+            const calculateScore = (dice) => {
+                const counts = {};
+                dice.forEach(d => counts[d] = (counts[d] || 0) + 1);
+                const values = Object.values(counts).sort((a,b) => b-a);
+                const sortedDice = [...dice].sort((a,b) => a-b);
+                
+                if (values[0] === 5) {
+                    return 5000 * dice[0];
+                }
+                
+                if (sortedDice.join('') === '12345' || sortedDice.join('') === '23456') {
+                    return 10000;
+                }
+                
+                if (values[0] === 4) {
+                    const num = Object.keys(counts).find(k => counts[k] === 4);
+                    return 1500 * parseInt(num);
+                }
+                
+                if (values[0] === 3 && values[1] === 2) {
+                    const threeNum = Object.keys(counts).find(k => counts[k] === 3);
+                    return 500 * parseInt(threeNum);
+                }
+                
+                if (values[0] === 3) {
+                    const threeNum = Object.keys(counts).find(k => counts[k] === 3);
+                    return 250 * parseInt(threeNum);
+                }
+                
+                if (values[0] === 2 && values[1] === 2) {
+                    const pairs = Object.keys(counts).filter(k => counts[k] === 2).map(Number);
+                    return 100 * Math.max(...pairs);
+                }
+                
+                if (values[0] === 2) {
+                    const pairNum = Object.keys(counts).find(k => counts[k] === 2);
+                    return 10 * parseInt(pairNum);
+                }
+                
+                return dice.reduce((sum, d) => sum + d, 0);
+            };
+
+            const getScoreCombination = (dice) => {
+                const counts = {};
+                dice.forEach(d => counts[d] = (counts[d] || 0) + 1);
+                const values = Object.values(counts).sort((a,b) => b-a);
+                const sortedDice = [...dice].sort((a,b) => a-b);
+                
+                if (values[0] === 5) return '5 זהות!';
+                if (sortedDice.join('') === '12345' || sortedDice.join('') === '23456') return 'רצף!';
+                if (values[0] === 4) return '4 זהות';
+                if (values[0] === 3 && values[1] === 2) return 'פול האוס';
+                if (values[0] === 3) return '3 זהות';
+                if (values[0] === 2 && values[1] === 2) return 'זוג כפול';
+                if (values[0] === 2) return 'זוג';
+                return 'ללא קומבינציה';
+            };
+
+            // Enhanced dice rolling with Firebase sync
+            const rollDice = async () => {
+                if (isRolling || !gameData || gameData.currentPlayerId !== playerId) return;
+                
+                setIsRolling(true);
+                setTurnTimer(10);
+                playDiceSound();
+                
+                let rollCount = 0;
+                const maxRolls = 20;
+                
+                const rollInterval = setInterval(() => {
+                    rollCount++;
+                    setDiceResults(Array.from({length: 5}, () => Math.floor(Math.random() * 6) + 1));
+                    
+                    if (rollCount >= maxRolls) {
+                        clearInterval(rollInterval);
+                        
+                        setTimeout(async () => {
+                            const finalResults = Array.from({length: 5}, () => Math.floor(Math.random() * 6) + 1);
+                            setDiceResults(finalResults);
+                            
+                            const score = calculateScore(finalResults);
+                            const combination = getScoreCombination(finalResults);
+                            
+                            // Update Firebase with roll result
+                            try {
+                                const updates = {};
+                                updates[`players/${playerId}/totalScore`] = (gameData.players[playerId].totalScore || 0) + score;
+                                updates[`players/${playerId}/lastRoll`] = {
+                                    dice: finalResults,
+                                    score: score,
+                                    combination: combination
+                                };
+                                
+                                await database.ref(`games/${gameId}`).update(updates);
+                                
+                                // Proceed to next turn
+                                setTimeout(() => {
+                                    nextTurn();
+                                }, 1500);
+                                
+                            } catch (error) {
+                                console.error('שגיאה בעדכון התוצאה:', error);
+                                alert('שגיאה בעדכון התוצאה');
+                            }
+                            
+                            setIsRolling(false);
+                        }, 300);
+                    }
+                }, 100);
+            };
+
+            // Next turn logic with Firebase
+            const nextTurn = async () => {
+                if (!gameData) return;
+                
+                const playersList = Object.values(gameData.players);
+                const activePlayers = playersList.filter(p => !p.eliminated);
+                const currentIndex = playersList.findIndex(p => p.id === gameData.currentPlayerId);
+                
+                let nextPlayerIndex = currentIndex;
+                do {
+                    nextPlayerIndex = (nextPlayerIndex + 1) % playersList.length;
+                } while (playersList[nextPlayerIndex] && playersList[nextPlayerIndex].eliminated);
+                
+                const firstActiveIndex = playersList.findIndex(p => !p.eliminated);
+                if (nextPlayerIndex === firstActiveIndex && activePlayers.every(p => p.lastRoll)) {
+                    // Round completed - check elimination or game end
+                    if (gameSettings.gameType === 1) {
+                        if (activePlayers.length > 1) {
+                            const lowestScore = Math.min(...activePlayers.map(p => p.totalScore));
+                            const updates = {};
+                            
+                            activePlayers.forEach(player => {
+                                if (player.totalScore === lowestScore) {
+                                    updates[`players/${player.id}/eliminated`] = true;
+                                }
+                                updates[`players/${player.id}/lastRoll`] = null;
+                            });
+                            
+                            const remaining = activePlayers.filter(p => p.totalScore !== lowestScore);
+                            if (remaining.length === 1) {
+                                updates['status'] = 'finished';
+                                updates['winner'] = remaining[0].id;
+                            } else {
+                                updates['gameRound'] = (gameData.gameRound || 1) + 1;
+                                updates['currentPlayerId'] = remaining[0].id;
+                            }
+                            
+                            await database.ref(`games/${gameId}`).update(updates);
+                        }
+                    } else if (gameSettings.gameType === 2) {
+                        const updates = {};
+                        activePlayers.forEach(player => {
+                            updates[`players/${player.id}/lastRoll`] = null;
+                        });
+                        
+                        if ((gameData.gameRound || 1) >= 5) {
+                            const highestScore = Math.max(...activePlayers.map(p => p.totalScore));
+                            const winners = activePlayers.filter(p => p.totalScore === highestScore);
+                            updates['status'] = 'finished';
+                            updates['winner'] = winners[0].id;
+                        } else {
+                            updates['gameRound'] = (gameData.gameRound || 1) + 1;
+                            updates['currentPlayerId'] = activePlayers[0].id;
+                        }
+                        
+                        await database.ref(`games/${gameId}`).update(updates);
+                    }
+                } else {
+                    // Next player's turn
+                    await database.ref(`games/${gameId}/currentPlayerId`).set(playersList[nextPlayerIndex].id);
+                }
+                
+                setTurnTimer(10);
+            };
 
             // Create game function
             const createGame = async () => {
                 console.log('מתחיל יצירת שולחן...');
                 const newGameId = generateId();
                 const newPlayerId = generateId();
-                
-                console.log(`ID שולחן: ${newGameId}, ID שחקן: ${newPlayerId}`);
                 
                 const gameData = {
                     id: newGameId,
@@ -89,14 +302,13 @@ const firebaseConfig = {
                             joinedAt: Date.now()
                         }
                     },
-                    currentPlayerIndex: 0,
+                    currentPlayerId: newPlayerId,
                     gameRound: 1,
                     turnTimer: 10,
                     createdAt: Date.now()
                 };
 
                 try {
-                    console.log('שולח נתונים ל-Firebase...');
                     await database.ref(`games/${newGameId}`).set(gameData);
                     console.log('✅ שולחן נוצר בהצלחה!');
                     
@@ -114,43 +326,28 @@ const firebaseConfig = {
             // Join game function
             const joinGame = async () => {
                 console.log('🚀 מתחיל הצטרפות לשולחן...');
-                console.log('שם שחקן:', playerName);
-                console.log('קוד שולחן:', gameId);
-                
                 const newPlayerId = generateId();
-                console.log('ID שחקן חדש:', newPlayerId);
                 
                 try {
-                    console.log('🔍 מחפש שולחן ב-Firebase...');
                     const gameSnapshot = await database.ref(`games/${gameId}`).once('value');
                     const existingGame = gameSnapshot.val();
                     
-                    console.log('תוצאות חיפוש:', existingGame);
-                    
                     if (!existingGame) {
-                        console.error('❌ שולחן לא נמצא!');
                         alert('שולחן לא נמצא! בדוק את הקוד.');
                         return;
                     }
                     
-                    console.log('✅ שולחן נמצא! סטטוס:', existingGame.status);
-                    
                     if (existingGame.status !== 'waiting') {
-                        console.error('❌ המשחק כבר התחיל!');
                         alert('המשחק כבר התחיל!');
                         return;
                     }
                     
                     const playerCount = Object.keys(existingGame.players || {}).length;
-                    console.log(`👥 שחקנים נוכחיים: ${playerCount}/${existingGame.settings.playerCount}`);
-                    
                     if (playerCount >= existingGame.settings.playerCount) {
-                        console.error('❌ השולחן מלא!');
                         alert('השולחן מלא!');
                         return;
                     }
 
-                    console.log('➕ מוסיף שחקן לשולחן...');
                     await database.ref(`games/${gameId}/players/${newPlayerId}`).set({
                         id: newPlayerId,
                         name: playerName,
@@ -161,8 +358,6 @@ const firebaseConfig = {
                         joinedAt: Date.now()
                     });
                     
-                    console.log('✅ שחקן נוסף בהצלחה!');
-
                     setPlayerId(newPlayerId);
                     gameRef.current = database.ref(`games/${gameId}`);
                     setScreen('waiting');
@@ -180,20 +375,22 @@ const firebaseConfig = {
                         const data = snapshot.val();
                         if (data) {
                             console.log('עדכון מ-Firebase:', data);
+                            setGameData(data);
                             setPlayers(Object.values(data.players || {}));
                             setGameSettings(data.settings || { playerCount: 2, gameType: 1 });
+                            setCurrentPlayerIndex(Object.values(data.players || {}).findIndex(p => p.id === data.currentPlayerId));
+                            setGameRound(data.gameRound || 1);
                             
                             // Auto start game when table is full
                             const currentPlayers = Object.keys(data.players || {}).length;
-                            console.log(`שחקנים: ${currentPlayers}/${data.settings.playerCount}`);
                             
                             if (data.status === 'waiting' && currentPlayers >= data.settings.playerCount) {
-                                console.log('מתחיל משחק - שולחן מלא!');
                                 database.ref(`games/${gameId}/status`).set('playing');
                                 setScreen('game');
                             } else if (data.status === 'playing') {
-                                console.log('משחק פעיל - עובר למסך משחק');
                                 setScreen('game');
+                            } else if (data.status === 'finished') {
+                                setScreen('gameOver');
                             }
                         }
                     });
@@ -202,8 +399,42 @@ const firebaseConfig = {
                 }
             }, [gameId]);
 
+            // Player position
+            const getPlayerPosition = (index, total) => {
+                const angle = (index * 360) / Math.min(total, 10);
+                const radius = 45;
+                const x = 50 + radius * Math.cos((angle - 90) * Math.PI / 180);
+                const y = 50 + radius * Math.sin((angle - 90) * Math.PI / 180);
+                return { x: `${x}%`, y: `${y}%` };
+            };
+
+            // Avatars and colors
+            const avatarEmojis = [
+                '🧑‍💼', '👩‍🦰', '🧑‍🎨', '👨‍🏫', '👩‍⚕️', 
+                '🧑‍🚀', '👩‍🎤', '👨‍🍳', '👩‍🔬', '🧑‍🎮'
+            ];
+
+            const avatarGradients = [
+                'bg-gradient-to-br from-red-400 to-red-600',
+                'bg-gradient-to-br from-blue-400 to-blue-600', 
+                'bg-gradient-to-br from-green-400 to-green-600',
+                'bg-gradient-to-br from-yellow-400 to-orange-500',
+                'bg-gradient-to-br from-purple-400 to-purple-600',
+                'bg-gradient-to-br from-pink-400 to-pink-600',
+                'bg-gradient-to-br from-indigo-400 to-indigo-600',
+                'bg-gradient-to-br from-orange-400 to-red-500',
+                'bg-gradient-to-br from-teal-400 to-teal-600',
+                'bg-gradient-to-br from-gray-400 to-gray-600'
+            ];
+
             return (
                 <div className="min-h-screen bg-gradient-to-br from-green-800 to-green-900 flex items-center justify-center p-4" dir="rtl">
+                    <audio 
+                        ref={audioRef} 
+                        preload="auto"
+                        src="data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEUATR2y/LPfOcFKnHM8dmINgkRbL3tqW8aBDNEn9/us2QZNB9B"
+                    />
+
                     {/* Welcome Screen */}
                     {screen === 'welcome' && (
                         <div className="text-center bg-white rounded-xl p-8 shadow-2xl max-w-md w-full">
@@ -239,10 +470,7 @@ const firebaseConfig = {
                                 />
                                 
                                 <button 
-                                    onClick={() => {
-                                        console.log('נלחץ הצטרף לשולחן', { playerName, gameId });
-                                        joinGame();
-                                    }}
+                                    onClick={joinGame}
                                     disabled={!playerName.trim() || gameId.trim().length < 5}
                                     className={`w-full font-bold py-3 px-6 rounded-lg text-lg transition-colors ${
                                         (!playerName.trim() || gameId.trim().length < 5) 
@@ -252,11 +480,6 @@ const firebaseConfig = {
                                 >
                                     הצטרף לשולחן
                                 </button>
-                                
-                                {/* Debug info */}
-                                <div className="text-xs text-gray-500 mt-2">
-                                    שם: {playerName || 'ריק'} | קוד: {gameId || 'ריק'} ({gameId.length} תווים)
-                                </div>
                             </div>
                         </div>
                     )}
@@ -294,12 +517,7 @@ const firebaseConfig = {
                                 </div>
                                 
                                 <button 
-                                    onClick={() => {
-                                        console.log('🔧 בודק חיבור Firebase...');
-                                        console.log('Database object:', database);
-                                        console.log('Firebase apps:', firebase.apps);
-                                        createGame();
-                                    }}
+                                    onClick={createGame}
                                     className="bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-lg text-lg w-full transition-colors"
                                 >
                                     צור שולחן
@@ -350,7 +568,12 @@ const firebaseConfig = {
                             </div>
                             
                             <button
-                                onClick={() => setScreen('welcome')}
+                                onClick={() => {
+                                    if (gameRef.current) {
+                                        gameRef.current.remove();
+                                    }
+                                    setScreen('welcome');
+                                }}
                                 className="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-lg text-sm transition-colors"
                             >
                                 🗑️ מחק שולחן
@@ -359,30 +582,177 @@ const firebaseConfig = {
                     )}
 
                     {/* Game Screen */}
-                    {screen === 'game' && (
-                        <div className="w-full max-w-4xl mx-auto text-center">
-                            <div className="bg-white rounded-xl p-8 shadow-2xl">
-                                <h2 className="text-3xl font-bold text-gray-800 mb-6">🎲 המשחק התחיל! 🎲</h2>
-                                <p className="text-xl text-gray-600 mb-4">שחקנים במשחק:</p>
-                                <div className="space-y-2 mb-6">
-                                    {players.map((player, index) => (
-                                        <div key={player.id} className="flex items-center justify-center gap-2 text-lg">
-                                            <span>🎮</span>
-                                            <span className="font-bold">{player.name}</span>
-                                            {player.isHost && <span className="text-xs bg-yellow-200 px-2 py-1 rounded">מארח</span>}
-                                        </div>
-                                    ))}
-                                </div>
-                                <p className="text-lg text-gray-600">
-                                    סוג משחק: {gameSettings.gameType === 1 ? 'עם הדחה' : '5 סיבובים'}
-                                </p>
+                    {screen === 'game' && gameData && (
+                        <div className="w-full max-w-6xl mx-auto">
+                            <div className="absolute top-4 left-4 z-10">
                                 <button
-                                    onClick={() => setScreen('welcome')}
-                                    className="mt-6 bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg transition-colors"
+                                    onClick={() => setSoundEnabled(!soundEnabled)}
+                                    className="bg-white rounded-full p-3 shadow-lg hover:shadow-xl transition-shadow"
                                 >
-                                    חזור לבית
+                                    {soundEnabled ? '🔊' : '🔇'}
                                 </button>
                             </div>
+
+                            <div className="text-center text-white mb-6 relative">
+                                <h2 className="text-2xl font-bold">
+                                    סיבוב {gameRound}
+                                    {gameSettings.gameType === 2 && <span className="text-yellow-300"> / 5</span>}
+                                </h2>
+                                <p>תור: {gameData.players[gameData.currentPlayerId]?.name}</p>
+                                {!isRolling && gameData.currentPlayerId === playerId && (
+                                    <div className={`absolute left-8 top-1/2 transform -translate-y-1/2 text-lg font-bold ${turnTimer <= 3 ? 'text-red-400 animate-pulse' : 'text-yellow-300'}`}>
+                                        ⏰ {turnTimer} שניות
+                                    </div>
+                                )}
+                            </div>
+
+                            <div className="relative w-full h-96 bg-green-600 rounded-full border-8 border-yellow-600 shadow-2xl mx-auto max-w-4xl">
+                                {players.map((player, index) => {
+                                    const pos = getPlayerPosition(index, players.length);
+                                    const isCurrentPlayer = gameData.currentPlayerId === player.id;
+                                    return (
+                                        <div
+                                            key={player.id}
+                                            className={`absolute transform -translate-x-1/2 -translate-y-1/2 text-center ${
+                                                player.eliminated ? 'opacity-30 grayscale' : ''
+                                            } ${isCurrentPlayer ? 'scale-110 z-10' : ''} transition-all duration-500`}
+                                            style={{ left: pos.x, top: pos.y }}
+                                        >
+                                            <div className={`w-24 h-24 ${avatarGradients[index]} rounded-full flex items-center justify-center text-4xl mb-2 shadow-lg border-4 border-white ${
+                                                isCurrentPlayer ? 'ring-8 ring-yellow-400 ring-opacity-80 player-glow transform scale-110' : 'ring-2 ring-white ring-opacity-50'
+                                            } transition-all duration-500 hover:scale-105`}>
+                                                {avatarEmojis[index]}
+                                            </div>
+                                            <div className={`text-white text-base font-bold ${isCurrentPlayer ? 'text-yellow-300' : ''}`}>
+                                                {player.name}
+                                            </div>
+                                            <div className="text-yellow-300 text-base font-bold">{player.totalScore} נק'</div>
+                                            {player.lastRoll && (
+                                                <>
+                                                    <div className="flex gap-1 justify-center mb-2 -mt-12">
+                                                        {player.lastRoll.dice.map((dice, diceIndex) => (
+                                                            <div
+                                                                key={diceIndex}
+                                                                className="w-8 h-8 bg-white rounded-md text-black text-base flex items-center justify-center font-bold border-2 border-gray-400 shadow-lg transform hover:scale-110 transition-transform duration-200"
+                                                            >
+                                                                {dice}
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                    <div className="text-sm text-gray-200 mt-1">
+                                                        {player.lastRoll.combination}<br/>
+                                                        +{player.lastRoll.score}
+                                                    </div>
+                                                </>
+                                            )}
+                                        </div>
+                                    );
+                                })}
+
+                                <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2">
+                                    {diceResults.length > 0 && (
+                                        <div className="flex gap-3 mb-6 justify-center">
+                                            {diceResults.map((dice, index) => (
+                                                <div
+                                                    key={index}
+                                                    className={`w-16 h-16 bg-white rounded-xl flex items-center justify-center text-3xl font-bold border-3 border-gray-400 shadow-2xl transform transition-all duration-300 ${
+                                                        isRolling ? 'dice-roll scale-110' : 'hover:scale-105'
+                                                    }`}
+                                                    style={{
+                                                        animationDelay: isRolling ? `${index * 0.1}s` : '0s',
+                                                        background: isRolling ? 'linear-gradient(45deg, #ff6b6b, #4ecdc4, #45b7d1, #96ceb4, #feca57)' : 'white',
+                                                        backgroundSize: isRolling ? '300% 300%' : 'auto',
+                                                        animation: isRolling ? 'gradient 0.5s ease infinite, spin 0.3s linear infinite' : 'none'
+                                                    }}
+                                                >
+                                                    <span className={isRolling ? 'animate-bounce' : ''}>{dice}</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                    
+                                    {!isRolling && gameData.currentPlayerId === playerId && (
+                                        <button
+                                            onClick={rollDice}
+                                            className="bg-gradient-to-r from-red-500 to-red-700 hover:from-red-600 hover:to-red-800 text-white font-bold py-4 px-8 rounded-xl shadow-lg transition-all duration-300 transform hover:scale-105 hover:shadow-2xl"
+                                        >
+                                            <span className="text-2xl mr-2">🎲</span>
+                                            זרוק קוביות
+                                        </button>
+                                    )}
+                                    
+                                    {isRolling && (
+                                        <div className="text-white font-bold text-xl animate-pulse bg-black bg-opacity-50 rounded-lg px-6 py-3">
+                                            <span className="animate-bounce inline-block">🎲</span>
+                                            <span className="mx-2">זורק קוביות...</span>
+                                            <span className="animate-bounce inline-block" style={{animationDelay: '0.2s'}}>🎲</span>
+                                        </div>
+                                    )}
+
+                                    {!isRolling && gameData.currentPlayerId !== playerId && (
+                                        <div className="text-white font-bold text-lg bg-black bg-opacity-50 rounded-lg px-6 py-3">
+                                            ממתין לתור של {gameData.players[gameData.currentPlayerId]?.name}...
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+
+                            {gameData.players[gameData.currentPlayerId]?.lastRoll && (
+                                <div className="text-center text-white mt-6 bg-black bg-opacity-50 rounded-lg p-4 max-w-md mx-auto">
+                                    <h3 className="text-xl font-bold">{gameData.players[gameData.currentPlayerId].lastRoll.combination}</h3>
+                                    <p className="text-lg">+{gameData.players[gameData.currentPlayerId].lastRoll.score} נקודות</p>
+                                    <p className="text-sm opacity-75">סה"כ: {gameData.players[gameData.currentPlayerId].totalScore} נקודות</p>
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {/* Game Over Screen */}
+                    {screen === 'gameOver' && gameData && (
+                        <div className="text-center bg-white rounded-xl p-8 shadow-2xl max-w-md w-full">
+                            <h1 className="text-6xl mb-4">🏆</h1>
+                            <h2 className="text-3xl font-bold text-yellow-600 mb-4">
+                                {gameData.winner ? gameData.players[gameData.winner]?.name : 'משחק הסתיים'}
+                            </h2>
+                            <p className="text-xl text-gray-700 mb-2">מנצח!</p>
+                            <p className="text-lg text-gray-600 mb-6">
+                                ניקוד סופי: {gameData.winner ? gameData.players[gameData.winner]?.totalScore : 0} נקודות
+                            </p>
+                            
+                            <div className="mb-6">
+                                <h3 className="text-lg font-bold mb-3">דירוג סופי:</h3>
+                                <div className="space-y-2">
+                                    {players
+                                        .sort((a, b) => b.totalScore - a.totalScore)
+                                        .map((player, index) => (
+                                            <div key={player.id} className={`flex justify-between items-center p-2 rounded ${index === 0 ? 'bg-yellow-100' : 'bg-gray-100'}`}>
+                                                <span className="font-bold">{index + 1}. {player.name}</span>
+                                                <span>{player.totalScore} נק'</span>
+                                            </div>
+                                        ))
+                                    }
+                                </div>
+                            </div>
+                            
+                            <button
+                                onClick={() => {
+                                    if (gameRef.current) {
+                                        gameRef.current.remove();
+                                    }
+                                    setScreen('welcome');
+                                    setGameId('');
+                                    setPlayerId('');
+                                    setPlayers([]);
+                                    setGameData(null);
+                                    setCurrentPlayerIndex(0);
+                                    setGameRound(1);
+                                    setDiceResults([]);
+                                    setTurnTimer(10);
+                                }}
+                                className="bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-8 rounded-lg w-full transition-colors flex items-center justify-center gap-2"
+                            >
+                                🔄 משחק חדש
+                            </button>
                         </div>
                     )}
                 </div>
