@@ -10,14 +10,117 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+    <style>
+        @keyframes glow {
+            0%, 100% { box-shadow: 0 0 20px rgba(255, 255, 0, 0.5); }
+            50% { box-shadow: 0 0 40px rgba(255, 255, 0, 0.8); }
+        }
+        .player-glow {
+            animation: glow 1s ease-in-out infinite;
+        }
+        @keyframes diceRoll {
+            0% { transform: rotateX(0deg) rotateY(0deg); }
+            25% { transform: rotateX(90deg) rotateY(90deg); }
+            50% { transform: rotateX(180deg) rotateY(180deg); }
+            75% { transform: rotateX(270deg) rotateY(270deg); }
+            100% { transform: rotateX(360deg) rotateY(360deg); }
+        }
+        .dice-roll {
+            animation: diceRoll 0.1s linear infinite;
+        }
+    </style>
 </head>
 <body>
     <div id="root"></div>
     <script type="text/babel">
-        // הקוד פה
+        // Firebase Configuration - החלף עם הקונפיגורציה שלך
+const firebaseConfig = {
+  apiKey: "AIzaSyAgWTlNnhRHQ_iGt10EgFuxkib-Z-ifa7s",
+  authDomain: "noam-s-dice-game.firebaseapp.com",
+  databaseURL: "https://noam-s-dice-game-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId: "noam-s-dice-game",
+  storageBucket: "noam-s-dice-game.firebasestorage.app",
+  messagingSenderId: "504625659348",
+  appId: "1:504625659348:web:718a1b6b6317bf45cdea41",
+  measurementId: "G-H0P3KWLM1P"
+};
+
+        // Initialize Firebase
+        if (!firebase.apps.length) {
+            firebase.initializeApp(firebaseConfig);
+        }
+        const database = firebase.database();
+
+        const { useState, useEffect, useRef } = React;
+
         const DiceGame = () => {
-            return <div>טוען...</div>;
+            const [screen, setScreen] = useState('welcome');
+            const [playerName, setPlayerName] = useState('');
+            const [gameId, setGameId] = useState('');
+
+            return (
+                <div className="min-h-screen bg-gradient-to-br from-green-800 to-green-900 flex items-center justify-center p-4" dir="rtl">
+                    {/* Welcome Screen */}
+                    {screen === 'welcome' && (
+                        <div className="text-center bg-white rounded-xl p-8 shadow-2xl max-w-md w-full">
+                            <h1 className="text-4xl font-bold text-green-800 mb-6">🎲</h1>
+                            <h2 className="text-3xl font-bold text-gray-800 mb-8">משחק הקוביות של נועם</h2>
+                            
+                            <div className="space-y-4">
+                                <input 
+                                    type="text"
+                                    placeholder="הכנס את שמך"
+                                    value={playerName}
+                                    onChange={(e) => setPlayerName(e.target.value)}
+                                    className="w-full p-3 border rounded-lg text-center text-lg"
+                                />
+                                
+                                <button 
+                                    onClick={() => setScreen('setup')}
+                                    disabled={!playerName.trim()}
+                                    className="bg-green-600 hover:bg-green-700 disabled:bg-gray-400 text-white font-bold py-3 px-6 rounded-lg text-xl w-full transition-colors"
+                                >
+                                    צור שולחן חדש
+                                </button>
+                                
+                                <div className="text-gray-500 font-bold">או</div>
+                                
+                                <input 
+                                    type="text"
+                                    placeholder="קוד שולחן"
+                                    value={gameId}
+                                    onChange={(e) => setGameId(e.target.value.toLowerCase())}
+                                    className="w-full p-3 border rounded-lg text-center text-lg font-mono"
+                                />
+                                
+                                <button 
+                                    onClick={() => alert('הצטרפות לשולחן - עוד לא מוכן')}
+                                    disabled={!playerName.trim() || !gameId.trim()}
+                                    className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white font-bold py-3 px-6 rounded-lg text-lg w-full transition-colors"
+                                >
+                                    הצטרף לשולחן
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Setup Screen */}
+                    {screen === 'setup' && (
+                        <div className="text-center bg-white rounded-xl p-8 shadow-2xl max-w-md w-full">
+                            <h2 className="text-2xl font-bold text-gray-800 mb-6">הגדרת שולחן חדש</h2>
+                            <p className="text-lg text-gray-600 mb-4">שלום {playerName}!</p>
+                            <button 
+                                onClick={() => setScreen('welcome')}
+                                className="bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg transition-colors"
+                            >
+                                חזור
+                            </button>
+                        </div>
+                    )}
+                </div>
+            );
         };
+
         ReactDOM.render(React.createElement(DiceGame), document.getElementById('root'));
     </script>
 </body>
