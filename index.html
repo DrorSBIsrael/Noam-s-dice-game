@@ -1,8 +1,4 @@
-const updateTimer = async (newTimer) => {
-            if (gameRef.current) {
-              await gameRef.current.child('turnTimer').set(newTimer);
-            }
-          };<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="he" dir="rtl">
 <head>
     <meta charset="UTF-8">
@@ -71,7 +67,7 @@ const updateTimer = async (newTimer) => {
     <div id="root"></div>
 
     <script type="text/babel">
-        // Firebase Configuration
+        // Firebase Configuration - החלף עם הקונפיגורציה שלך
 const firebaseConfig = {
   apiKey: "AIzaSyAgWTlNnhRHQ_iGt10EgFuxkib-Z-ifa7s",
   authDomain: "noam-s-dice-game.firebaseapp.com",
@@ -216,39 +212,6 @@ const firebaseConfig = {
             setScreen('waiting');
           };
 
-          const resetGame = async () => {
-            if (!gameRef.current) return;
-            
-            // Reset all players
-            for (const player of players) {
-              await gameRef.current.child(`players/${player.id}`).update({
-                totalScore: 0,
-                eliminated: false,
-                lastRoll: null
-              });
-            }
-            
-            // Reset game state
-            await gameRef.current.update({
-              currentPlayerIndex: 0,
-              gameRound: 1,
-              turnTimer: 10,
-              status: 'playing'
-            });
-          };
-
-          const deleteGame = async () => {
-            if (gameRef.current) {
-              await gameRef.current.remove();
-              setScreen('welcome');
-              setGameId('');
-              setPlayerId('');
-              setGameData(null);
-              setPlayers([]);
-              gameRef.current = null;
-            }
-          };
-
           const joinGame = async (gameIdToJoin, playerNameToJoin) => {
             const newPlayerId = generateId();
             
@@ -296,7 +259,7 @@ const firebaseConfig = {
             }
           };
 
-          const resetGame = async () => {
+          const gameReset = async () => {
             if (!gameRef.current) return;
             
             // Reset all players
@@ -315,6 +278,24 @@ const firebaseConfig = {
               turnTimer: 10,
               status: 'playing'
             });
+          };
+
+          const deleteGame = async () => {
+            if (gameRef.current) {
+              await gameRef.current.remove();
+              setScreen('welcome');
+              setGameId('');
+              setPlayerId('');
+              setGameData(null);
+              setPlayers([]);
+              gameRef.current = null;
+            }
+          };
+
+          const updateTimer = async (newTimer) => {
+            if (gameRef.current) {
+              await gameRef.current.child('turnTimer').set(newTimer);
+            }
           };
 
           const rollDice = async () => {
@@ -344,7 +325,181 @@ const firebaseConfig = {
                   await gameRef.current.child(`players/${playerId}`).update({
                     totalScore: (players.find(p => p.id === playerId)?.totalScore || 0) + score,
                     lastRoll: {
-                      dice: finalResults,
+                      </button>
+                    </div>
+                  )}
+
+                  <div className="text-center text-white mb-4 sm:mb-6 relative">
+                    <h2 className="text-xl sm:text-2xl font-bold">
+                      סיבוב {gameRound}
+                      {gameSettings.gameType === 2 && <span className="text-yellow-300"> / 5</span>}
+                    </h2>
+                    <p className="text-sm sm:text-base">תור: {players[currentPlayerIndex]?.name}</p>
+                    {!isRolling && players[currentPlayerIndex]?.id === playerId && (
+                      <div className={`absolute left-4 sm:left-8 top-1/2 transform -translate-y-1/2 text-sm sm:text-lg font-bold ${turnTimer <= 3 ? 'text-red-400 animate-pulse' : 'text-yellow-300'}`}>
+                        ⏰ {turnTimer}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className={`relative w-full game-table bg-green-600 rounded-full border-4 sm:border-8 border-yellow-600 shadow-2xl mx-auto`} style={{height: window.innerWidth < 768 ? '300px' : '384px', maxWidth: window.innerWidth < 768 ? '350px' : '64rem'}}>
+                    {players.map((player, index) => {
+                      const pos = getPlayerPosition(index, players.length);
+                      const isCurrentPlayer = index === currentPlayerIndex;
+                      return (
+                        <div
+                          key={player.id}
+                          className={`absolute transform -translate-x-1/2 -translate-y-1/2 text-center ${
+                            player.eliminated ? 'opacity-30 grayscale' : ''
+                          } ${isCurrentPlayer ? 'scale-110 z-10' : ''} transition-all duration-500`}
+                          style={{ left: pos.x, top: pos.y }}
+                        >
+                          <div className={`player-avatar w-16 h-16 sm:w-24 sm:h-24 ${avatarGradients[index]} rounded-full flex items-center justify-center text-2xl sm:text-4xl mb-1 sm:mb-2 shadow-lg border-2 sm:border-4 border-white ${
+                            isCurrentPlayer ? 'ring-4 sm:ring-8 ring-yellow-400 ring-opacity-80 player-glow transform scale-110' : 'ring-1 sm:ring-2 ring-white ring-opacity-50'
+                          } transition-all duration-500 hover:scale-105`}>
+                            {avatarEmojis[index]}
+                          </div>
+                          <div className={`text-white text-xs sm:text-base font-bold ${isCurrentPlayer ? 'text-yellow-300' : ''}`}>
+                            {player.name}
+                          </div>
+                          <div className="text-yellow-300 text-xs sm:text-base font-bold">{player.totalScore} נק'</div>
+                          {player.lastRoll && (
+                            <>
+                              <div className="flex gap-1 justify-center mb-1 sm:mb-2 -mt-8 sm:-mt-12">
+                                {player.lastRoll.dice.map((dice, diceIndex) => (
+                                  <div
+                                    key={diceIndex}
+                                    className="player-dice w-6 h-6 sm:w-8 sm:h-8 bg-white rounded text-black text-xs sm:text-base flex items-center justify-center font-bold border border-gray-400 shadow-lg transform hover:scale-110 transition-transform duration-200"
+                                  >
+                                    {dice}
+                                  </div>
+                                ))}
+                              </div>
+                              <div className="text-xs sm:text-sm text-gray-200 mt-1">
+                                {player.lastRoll.combination}<br/>
+                                +{player.lastRoll.score}
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      );
+                    })}
+
+                    <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2">
+                      {diceResults.length > 0 && (
+                        <div className="flex gap-2 sm:gap-3 mb-4 sm:mb-6 justify-center">
+                          {diceResults.map((dice, index) => (
+                            <div
+                              key={index}
+                              className={`dice-main w-12 h-12 sm:w-16 sm:h-16 bg-white rounded-lg sm:rounded-xl flex items-center justify-center text-xl sm:text-3xl font-bold border-2 sm:border-3 border-gray-400 shadow-2xl transform transition-all duration-300 ${
+                                isRolling ? 'dice-roll scale-110' : 'hover:scale-105'
+                              }`}
+                              style={{
+                                animationDelay: isRolling ? `${index * 0.1}s` : '0s',
+                                background: isRolling ? 'linear-gradient(45deg, #ff6b6b, #4ecdc4, #45b7d1, #96ceb4, #feca57)' : 'white',
+                                backgroundSize: isRolling ? '300% 300%' : 'auto',
+                                animation: isRolling ? 'gradient 0.5s ease infinite, spin 0.3s linear infinite' : 'none'
+                              }}
+                            >
+                              <span className={isRolling ? 'animate-bounce' : ''}>{dice}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      
+                      {!isRolling && players[currentPlayerIndex]?.id === playerId && (
+                        <button
+                          onClick={rollDice}
+                          className="bg-gradient-to-r from-red-500 to-red-700 hover:from-red-600 hover:to-red-800 text-white font-bold py-2 px-4 sm:py-4 sm:px-8 rounded-lg sm:rounded-xl shadow-lg transition-all duration-300 transform hover:scale-105 hover:shadow-2xl text-sm sm:text-base"
+                        >
+                          <span className="text-lg sm:text-2xl mr-2">🎲</span>
+                          זרוק קוביות
+                        </button>
+                      )}
+                      
+                      {!isRolling && players[currentPlayerIndex]?.id !== playerId && (
+                        <div className="text-white font-bold text-sm sm:text-xl bg-black bg-opacity-50 rounded-lg px-4 py-2 sm:px-6 sm:py-3">
+                          תור של {players[currentPlayerIndex]?.name}
+                        </div>
+                      )}
+                      
+                      {isRolling && (
+                        <div className="text-white font-bold text-sm sm:text-xl animate-pulse bg-black bg-opacity-50 rounded-lg px-4 py-2 sm:px-6 sm:py-3">
+                          <span className="animate-bounce inline-block">🎲</span>
+                          <span className="mx-2">זורק קוביות...</span>
+                          <span className="animate-bounce inline-block" style={{animationDelay: '0.2s'}}>🎲</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {players[currentPlayerIndex]?.lastRoll && (
+                    <div className="text-center text-white mt-4 sm:mt-6 bg-black bg-opacity-50 rounded-lg p-3 sm:p-4 max-w-sm sm:max-w-md mx-auto">
+                      <h3 className="text-lg sm:text-xl font-bold">{players[currentPlayerIndex].lastRoll.combination}</h3>
+                      <p className="text-sm sm:text-lg">+{players[currentPlayerIndex].lastRoll.score} נקודות</p>
+                      <p className="text-xs sm:text-sm opacity-75">סה"כ: {players[currentPlayerIndex].totalScore} נקודות</p>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Game Over Screen */}
+              {screen === 'gameOver' && (
+                <div className="text-center bg-white rounded-xl p-6 sm:p-8 shadow-2xl max-w-md w-full mx-2">
+                  <h1 className="text-4xl sm:text-6xl mb-4">🏆</h1>
+                  <h2 className="text-2xl sm:text-3xl font-bold text-yellow-600 mb-4">
+                    {gameSettings.gameType === 1 
+                      ? players.find(p => !p.eliminated)?.name 
+                      : (() => {
+                          const activePlayers = players.filter(p => !p.eliminated);
+                          const highestScore = Math.max(...activePlayers.map(p => p.totalScore));
+                          const winners = activePlayers.filter(p => p.totalScore === highestScore);
+                          return winners.length === 1 ? winners[0].name : `${winners.length} מנצחים!`;
+                        })()
+                    }
+                  </h2>
+                  <p className="text-lg sm:text-xl text-gray-700 mb-2">מנצח!</p>
+                  <p className="text-base sm:text-lg text-gray-600 mb-6">
+                    ניקוד סופי: {gameSettings.gameType === 1 
+                      ? players.find(p => !p.eliminated)?.totalScore 
+                      : Math.max(...players.filter(p => !p.eliminated).map(p => p.totalScore))
+                    } נקודות
+                  </p>
+                  
+                  <div className="space-y-3">
+                    <button
+                      onClick={() => {
+                        setScreen('welcome');
+                        setGameId('');
+                        setPlayerId('');
+                        setPlayerName('');
+                        setGameData(null);
+                        setPlayers([]);
+                        if (gameRef.current) {
+                          gameRef.current.off();
+                          gameRef.current = null;
+                        }
+                      }}
+                      className="bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-lg w-full transition-colors flex items-center justify-center gap-2 text-sm sm:text-base"
+                    >
+                      <RotateIcon />
+                      משחק חדש
+                    </button>
+                    
+                    <div className="text-xs sm:text-sm text-gray-500">
+                      קוד השולחן: {gameId}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        };
+
+        ReactDOM.render(React.createElement(DiceGame), document.getElementById('root'));
+    </script>
+</body>
+</html>dice: finalResults,
                       score: score,
                       combination: combination
                     }
@@ -422,7 +577,7 @@ const firebaseConfig = {
             await gameRef.current.child('turnTimer').set(10);
           };
 
-          // Calculate score and combinations (same as before)
+          // Calculate score and combinations
           const calculateScore = (dice) => {
             const counts = {};
             dice.forEach(d => counts[d] = (counts[d] || 0) + 1);
@@ -468,27 +623,6 @@ const firebaseConfig = {
             if (values[0] === 2 && values[1] === 2) return 'זוג כפול';
             if (values[0] === 2) return 'זוג';
             return 'ללא קומבינציה';
-          };
-
-          const resetGame = async () => {
-            if (!gameRef.current) return;
-            
-            // Reset all players
-            for (const player of players) {
-              await gameRef.current.child(`players/${player.id}`).update({
-                totalScore: 0,
-                eliminated: false,
-                lastRoll: null
-              });
-            }
-            
-            // Reset game state
-            await gameRef.current.update({
-              currentPlayerIndex: 0,
-              gameRound: 1,
-              turnTimer: 10,
-              status: 'playing'
-            });
           };
 
           const getPlayerPosition = (index, total) => {
@@ -682,185 +816,10 @@ const firebaseConfig = {
                       <button
                         onClick={() => {
                           if (confirm('האם אתה בטוח שברצונך לאפס את המשחק?')) {
-                            resetGame();
+                            gameReset();
                           }
                         }}
                         className="bg-red-500 hover:bg-red-600 text-white rounded-full p-2 sm:p-3 shadow-lg hover:shadow-xl transition-all text-xs sm:text-sm font-bold"
                         title="איפוס משחק"
                       >
                         🔄
-                      </button>
-                    </div>
-                  )}
-
-                  <div className="text-center text-white mb-4 sm:mb-6 relative">
-                    <h2 className="text-xl sm:text-2xl font-bold">
-                      סיבוב {gameRound}
-                      {gameSettings.gameType === 2 && <span className="text-yellow-300"> / 5</span>}
-                    </h2>
-                    <p className="text-sm sm:text-base">תור: {players[currentPlayerIndex]?.name}</p>
-                    {!isRolling && players[currentPlayerIndex]?.id === playerId && (
-                      <div className={`absolute left-4 sm:left-8 top-1/2 transform -translate-y-1/2 text-sm sm:text-lg font-bold ${turnTimer <= 3 ? 'text-red-400 animate-pulse' : 'text-yellow-300'}`}>
-                        ⏰ {turnTimer}
-                      </div>
-                    )}
-                  </div>
-
-                  <div className={`relative w-full game-table bg-green-600 rounded-full border-4 sm:border-8 border-yellow-600 shadow-2xl mx-auto`} style={{height: window.innerWidth < 768 ? '300px' : '384px', maxWidth: window.innerWidth < 768 ? '350px' : '64rem'}}>
-                    {players.map((player, index) => {
-                      const pos = getPlayerPosition(index, players.length);
-                      const isCurrentPlayer = index === currentPlayerIndex;
-                      return (
-                        <div
-                          key={player.id}
-                          className={`absolute transform -translate-x-1/2 -translate-y-1/2 text-center ${
-                            player.eliminated ? 'opacity-30 grayscale' : ''
-                          } ${isCurrentPlayer ? 'scale-110 z-10' : ''} transition-all duration-500`}
-                          style={{ left: pos.x, top: pos.y }}
-                        >
-                          <div className={`player-avatar w-16 h-16 sm:w-24 sm:h-24 ${avatarGradients[index]} rounded-full flex items-center justify-center text-2xl sm:text-4xl mb-1 sm:mb-2 shadow-lg border-2 sm:border-4 border-white ${
-                            isCurrentPlayer ? 'ring-4 sm:ring-8 ring-yellow-400 ring-opacity-80 player-glow transform scale-110' : 'ring-1 sm:ring-2 ring-white ring-opacity-50'
-                          } transition-all duration-500 hover:scale-105`}>
-                            {avatarEmojis[index]}
-                          </div>
-                          <div className={`text-white text-xs sm:text-base font-bold ${isCurrentPlayer ? 'text-yellow-300' : ''}`}>
-                            {player.name}
-                          </div>
-                          <div className="text-yellow-300 text-xs sm:text-base font-bold">{player.totalScore} נק'</div>
-                          {player.lastRoll && (
-                            <>
-                              <div className="flex gap-1 justify-center mb-1 sm:mb-2 -mt-8 sm:-mt-12">
-                                {player.lastRoll.dice.map((dice, diceIndex) => (
-                                  <div
-                                    key={diceIndex}
-                                    className="player-dice w-6 h-6 sm:w-8 sm:h-8 bg-white rounded text-black text-xs sm:text-base flex items-center justify-center font-bold border border-gray-400 shadow-lg transform hover:scale-110 transition-transform duration-200"
-                                  >
-                                    {dice}
-                                  </div>
-                                ))}
-                              </div>
-                              <div className="text-xs sm:text-sm text-gray-200 mt-1">
-                                {player.lastRoll.combination}<br/>
-                                +{player.lastRoll.score}
-                              </div>
-                            </>
-                          )}
-                        </div>
-                      );
-                    })}
-
-                    <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2">
-                      {diceResults.length > 0 && (
-                        <div className="flex gap-2 sm:gap-3 mb-4 sm:mb-6 justify-center">
-                          {diceResults.map((dice, index) => (
-                            <div
-                              key={index}
-                              className={`dice-main w-12 h-12 sm:w-16 sm:h-16 bg-white rounded-lg sm:rounded-xl flex items-center justify-center text-xl sm:text-3xl font-bold border-2 sm:border-3 border-gray-400 shadow-2xl transform transition-all duration-300 ${
-                                isRolling ? 'dice-roll scale-110' : 'hover:scale-105'
-                              }`}
-                              style={{
-                                animationDelay: isRolling ? `${index * 0.1}s` : '0s',
-                                background: isRolling ? 'linear-gradient(45deg, #ff6b6b, #4ecdc4, #45b7d1, #96ceb4, #feca57)' : 'white',
-                                backgroundSize: isRolling ? '300% 300%' : 'auto',
-                                animation: isRolling ? 'gradient 0.5s ease infinite, spin 0.3s linear infinite' : 'none'
-                              }}
-                            >
-                              <span className={isRolling ? 'animate-bounce' : ''}>{dice}</span>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                      
-                      {!isRolling && players[currentPlayerIndex]?.id === playerId && (
-                        <button
-                          onClick={rollDice}
-                          className="bg-gradient-to-r from-red-500 to-red-700 hover:from-red-600 hover:to-red-800 text-white font-bold py-2 px-4 sm:py-4 sm:px-8 rounded-lg sm:rounded-xl shadow-lg transition-all duration-300 transform hover:scale-105 hover:shadow-2xl text-sm sm:text-base"
-                        >
-                          <span className="text-lg sm:text-2xl mr-2">🎲</span>
-                          זרוק קוביות
-                        </button>
-                      )}
-                      
-                      {!isRolling && players[currentPlayerIndex]?.id !== playerId && (
-                        <div className="text-white font-bold text-sm sm:text-xl bg-black bg-opacity-50 rounded-lg px-4 py-2 sm:px-6 sm:py-3">
-                          תור של {players[currentPlayerIndex]?.name}
-                        </div>
-                      )}
-                      
-                      {isRolling && (
-                        <div className="text-white font-bold text-sm sm:text-xl animate-pulse bg-black bg-opacity-50 rounded-lg px-4 py-2 sm:px-6 sm:py-3">
-                          <span className="animate-bounce inline-block">🎲</span>
-                          <span className="mx-2">זורק קוביות...</span>
-                          <span className="animate-bounce inline-block" style={{animationDelay: '0.2s'}}>🎲</span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {players[currentPlayerIndex]?.lastRoll && (
-                    <div className="text-center text-white mt-4 sm:mt-6 bg-black bg-opacity-50 rounded-lg p-3 sm:p-4 max-w-sm sm:max-w-md mx-auto">
-                      <h3 className="text-lg sm:text-xl font-bold">{players[currentPlayerIndex].lastRoll.combination}</h3>
-                      <p className="text-sm sm:text-lg">+{players[currentPlayerIndex].lastRoll.score} נקודות</p>
-                      <p className="text-xs sm:text-sm opacity-75">סה"כ: {players[currentPlayerIndex].totalScore} נקודות</p>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Game Over Screen */}
-              {screen === 'gameOver' && (
-                <div className="text-center bg-white rounded-xl p-6 sm:p-8 shadow-2xl max-w-md w-full mx-2">
-                  <h1 className="text-4xl sm:text-6xl mb-4">🏆</h1>
-                  <h2 className="text-2xl sm:text-3xl font-bold text-yellow-600 mb-4">
-                    {gameSettings.gameType === 1 
-                      ? players.find(p => !p.eliminated)?.name 
-                      : (() => {
-                          const activePlayers = players.filter(p => !p.eliminated);
-                          const highestScore = Math.max(...activePlayers.map(p => p.totalScore));
-                          const winners = activePlayers.filter(p => p.totalScore === highestScore);
-                          return winners.length === 1 ? winners[0].name : `${winners.length} מנצחים!`;
-                        })()
-                    }
-                  </h2>
-                  <p className="text-lg sm:text-xl text-gray-700 mb-2">מנצח!</p>
-                  <p className="text-base sm:text-lg text-gray-600 mb-6">
-                    ניקוד סופי: {gameSettings.gameType === 1 
-                      ? players.find(p => !p.eliminated)?.totalScore 
-                      : Math.max(...players.filter(p => !p.eliminated).map(p => p.totalScore))
-                    } נקודות
-                  </p>
-                  
-                  <div className="space-y-3">
-                    <button
-                      onClick={() => {
-                        setScreen('welcome');
-                        setGameId('');
-                        setPlayerId('');
-                        setPlayerName('');
-                        setGameData(null);
-                        setPlayers([]);
-                        if (gameRef.current) {
-                          gameRef.current.off();
-                          gameRef.current = null;
-                        }
-                      }}
-                      className="bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-lg w-full transition-colors flex items-center justify-center gap-2 text-sm sm:text-base"
-                    >
-                      <RotateIcon />
-                      משחק חדש
-                    </button>
-                    
-                    <div className="text-xs sm:text-sm text-gray-500">
-                      קוד השולחן: {gameId}
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-          );
-        };
-
-        ReactDOM.render(React.createElement(DiceGame), document.getElementById('root'));
-    </script>
-</body>
-</html>
