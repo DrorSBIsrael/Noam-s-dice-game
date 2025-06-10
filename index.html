@@ -113,28 +113,44 @@ const firebaseConfig = {
 
             // Join game function
             const joinGame = async () => {
+                console.log('🚀 מתחיל הצטרפות לשולחן...');
+                console.log('שם שחקן:', playerName);
+                console.log('קוד שולחן:', gameId);
+                
                 const newPlayerId = generateId();
+                console.log('ID שחקן חדש:', newPlayerId);
                 
                 try {
+                    console.log('🔍 מחפש שולחן ב-Firebase...');
                     const gameSnapshot = await database.ref(`games/${gameId}`).once('value');
                     const existingGame = gameSnapshot.val();
                     
+                    console.log('תוצאות חיפוש:', existingGame);
+                    
                     if (!existingGame) {
+                        console.error('❌ שולחן לא נמצא!');
                         alert('שולחן לא נמצא! בדוק את הקוד.');
                         return;
                     }
                     
+                    console.log('✅ שולחן נמצא! סטטוס:', existingGame.status);
+                    
                     if (existingGame.status !== 'waiting') {
+                        console.error('❌ המשחק כבר התחיל!');
                         alert('המשחק כבר התחיל!');
                         return;
                     }
                     
                     const playerCount = Object.keys(existingGame.players || {}).length;
+                    console.log(`👥 שחקנים נוכחיים: ${playerCount}/${existingGame.settings.playerCount}`);
+                    
                     if (playerCount >= existingGame.settings.playerCount) {
+                        console.error('❌ השולחן מלא!');
                         alert('השולחן מלא!');
                         return;
                     }
 
+                    console.log('➕ מוסיף שחקן לשולחן...');
                     await database.ref(`games/${gameId}/players/${newPlayerId}`).set({
                         id: newPlayerId,
                         name: playerName,
@@ -144,13 +160,16 @@ const firebaseConfig = {
                         isHost: false,
                         joinedAt: Date.now()
                     });
+                    
+                    console.log('✅ שחקן נוסף בהצלחה!');
 
                     setPlayerId(newPlayerId);
                     gameRef.current = database.ref(`games/${gameId}`);
                     setScreen('waiting');
                     
                 } catch (error) {
-                    alert('שגיאה בהתחברות לשולחן');
+                    console.error('❌ שגיאה בהתחברות:', error);
+                    alert('שגיאה בהתחברות לשולחן: ' + error.message);
                 }
             };
 
