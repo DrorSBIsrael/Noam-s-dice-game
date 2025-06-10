@@ -78,7 +78,6 @@ const firebaseConfig = {
   appId: "1:504625659348:web:718a1b6b6317bf45cdea41",
   measurementId: "G-H0P3KWLM1P"
 };
-
         // Initialize Firebase
         if (!firebase.apps.length) {
             firebase.initializeApp(firebaseConfig);
@@ -418,6 +417,27 @@ const firebaseConfig = {
             return 'ללא קומבינציה';
           };
 
+          const resetGame = async () => {
+            if (!gameRef.current) return;
+            
+            // Reset all players
+            for (const player of players) {
+              await gameRef.current.child(`players/${player.id}`).update({
+                totalScore: 0,
+                eliminated: false,
+                lastRoll: null
+              });
+            }
+            
+            // Reset game state
+            await gameRef.current.update({
+              currentPlayerIndex: 0,
+              gameRound: 1,
+              turnTimer: 10,
+              status: 'playing'
+            });
+          };
+
           const getPlayerPosition = (index, total) => {
             const angle = (index * 360) / Math.min(total, 10);
             const radius = window.innerWidth < 768 ? 35 : 45;
@@ -571,9 +591,32 @@ const firebaseConfig = {
                     </div>
                   </div>
                   
-                  <div className="text-sm text-gray-600">
+                  <div className="text-sm text-gray-600 mb-4">
                     ממתין לעוד {gameSettings.playerCount - players.length} שחקנים...
                   </div>
+                  
+                  {/* Reset button for host in waiting screen */}
+                  {players.find(p => p.id === playerId)?.isHost && (
+                    <button
+                      onClick={() => {
+                        if (confirm('האם אתה בטוח שברצונך לאפס את השולחן?')) {
+                          // Delete the entire game
+                          if (gameRef.current) {
+                            gameRef.current.remove();
+                            setScreen('welcome');
+                            setGameId('');
+                            setPlayerId('');
+                            setGameData(null);
+                            setPlayers([]);
+                            gameRef.current = null;
+                          }
+                        }
+                      }}
+                      className="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-lg text-sm transition-colors"
+                    >
+                      🗑️ מחק שולחן
+                    </button>
+                  )}
                 </div>
               )}
 
@@ -588,6 +631,23 @@ const firebaseConfig = {
                       <VolumeIcon enabled={soundEnabled} />
                     </button>
                   </div>
+
+                  {/* Reset button for host */}
+                  {players.find(p => p.id === playerId)?.isHost && (
+                    <div className="absolute top-2 right-2 z-10">
+                      <button
+                        onClick={() => {
+                          if (confirm('האם אתה בטוח שברצונך לאפס את המשחק?')) {
+                            resetGame();
+                          }
+                        }}
+                        className="bg-red-500 hover:bg-red-600 text-white rounded-full p-2 sm:p-3 shadow-lg hover:shadow-xl transition-all text-xs sm:text-sm font-bold"
+                        title="איפוס משחק"
+                      >
+                        🔄
+                      </button>
+                    </div>
+                  )}
 
                   <div className="text-center text-white mb-4 sm:mb-6 relative">
                     <h2 className="text-xl sm:text-2xl font-bold">
