@@ -68,8 +68,11 @@ const firebaseConfig = {
 
             // Create game function
             const createGame = async () => {
+                console.log('מתחיל יצירת שולחן...');
                 const newGameId = generateId();
                 const newPlayerId = generateId();
+                
+                console.log(`ID שולחן: ${newGameId}, ID שחקן: ${newPlayerId}`);
                 
                 const gameData = {
                     id: newGameId,
@@ -93,14 +96,18 @@ const firebaseConfig = {
                 };
 
                 try {
+                    console.log('שולח נתונים ל-Firebase...');
                     await database.ref(`games/${newGameId}`).set(gameData);
+                    console.log('✅ שולחן נוצר בהצלחה!');
+                    
                     setGameId(newGameId);
                     setPlayerId(newPlayerId);
                     gameRef.current = database.ref(`games/${newGameId}`);
                     setScreen('waiting');
                     alert(`שולחן נוצר! קוד השולחן: ${newGameId}`);
                 } catch (error) {
-                    alert('שגיאה ביצירת השולחן');
+                    console.error('❌ שגיאה ביצירת השולחן:', error);
+                    alert('שגיאה ביצירת השולחן: ' + error.message);
                 }
             };
 
@@ -268,7 +275,12 @@ const firebaseConfig = {
                                 </div>
                                 
                                 <button 
-                                    onClick={createGame}
+                                    onClick={() => {
+                                        console.log('🔧 בודק חיבור Firebase...');
+                                        console.log('Database object:', database);
+                                        console.log('Firebase apps:', firebase.apps);
+                                        createGame();
+                                    }}
                                     className="bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-lg text-lg w-full transition-colors"
                                 >
                                     צור שולחן
