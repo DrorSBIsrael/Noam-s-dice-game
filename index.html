@@ -324,7 +324,14 @@
                         if (data) {
                             console.log('📊 Update:', data.status);
                             setGameData(data);
-                            setPlayers(Object.values(data.players || {}));
+                            const playersArray = Object.values(data.players || {});
+		setPlayers(playersArray);
+		console.log('Updated players:', playersArray.length);
+// אחרי שחקן מצטרף - כפו עדכון
+setTimeout(() => {
+    console.log('Force updating screen...');
+    setScreen('waiting');
+}, 500);
                             setGameSettings(data.settings || { playerCount: 2, gameType: 1 });
                             setCurrentPlayerIndex(Object.values(data.players || {}).findIndex(p => p.id === data.currentPlayerId));
                             setGameRound(data.gameRound || 1);
