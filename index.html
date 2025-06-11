@@ -253,16 +253,21 @@
             };
 
             const joinGame = async () => {
+                console.log('🚀 Starting joinGame process');
                 const newPlayerId = generateId();
+                console.log('🆔 Generated player ID:', newPlayerId);
                 
                 try {
+                    console.log('🔗 Setting up Firebase reference for gameId:', gameId);
                     // Set up Firebase reference FIRST
                     setGameId(gameId);
                     setPlayerId(newPlayerId);
                     gameRef.current = database.ref(`games/${gameId}`);
+                    console.log('✅ Firebase reference set');
                     
                     const gameSnapshot = await database.ref(`games/${gameId}`).once('value');
                     const existingGame = gameSnapshot.val();
+                    console.log('🎯 Found existing game:', existingGame);
                     
                     if (!existingGame) {
                         alert('שולחן לא נמצא!');
@@ -275,11 +280,13 @@
                     }
                     
                     const playerCount = Object.keys(existingGame.players || {}).length;
+                    console.log('👥 Current player count:', playerCount, '/', existingGame.settings.playerCount);
                     if (playerCount >= existingGame.settings.playerCount) {
                         alert('השולחן מלא!');
                         return;
                     }
 
+                    console.log('➕ Adding player to Firebase...');
                     await database.ref(`games/${gameId}/players/${newPlayerId}`).set({
                         id: newPlayerId,
                         name: playerName,
@@ -289,49 +296,66 @@
                         isHost: false,
                         joinedAt: Date.now()
                     });
+                    console.log('✅ Player added successfully');
                     
                     setScreen('waiting');
+                    console.log('📺 Screen set to waiting');
                     
                     setTimeout(async () => {
+                        console.log('⏰ Checking if game should start...');
                         const updatedSnapshot = await database.ref(`games/${gameId}`).once('value');
                         const updatedGame = updatedSnapshot.val();
                         if (updatedGame) {
                             const currentPlayerCount = Object.keys(updatedGame.players || {}).length;
+                            console.log('👥 Updated player count:', currentPlayerCount, '/', updatedGame.settings.playerCount);
                             if (currentPlayerCount >= updatedGame.settings.playerCount && updatedGame.status === 'waiting') {
+                                console.log('🎮 Starting game - setting status to playing');
                                 await database.ref(`games/${gameId}/status`).set('playing');
                             }
                         }
                     }, 1000);
                     
                 } catch (error) {
-                    console.error('שגיאה:', error);
+                    console.error('❌ Error in joinGame:', error);
                     alert('שגיאה: ' + error.message);
                 }
             };
 
-            // Fixed Firebase listener
+            // Fixed Firebase listener with debug
             useEffect(() => {
                 if (gameId && gameRef.current) {
+                    console.log('🔥 Starting listener for gameId:', gameId);
                     const unsubscribe = gameRef.current.on('value', (snapshot) => {
                         const data = snapshot.val();
+                        console.log('📊 Firebase data:', data);
                         if (data) {
                             setGameData(data);
-                            setPlayers(Object.values(data.players || {}));
+                            const playersArray = Object.values(data.players || {});
+                            console.log('👥 Players found:', playersArray.length, playersArray.map(p => p.name));
+                            setPlayers(playersArray);
                             setGameSettings(data.settings || { playerCount: 2, gameType: 1 });
-                            setCurrentPlayerIndex(Object.values(data.players || {}).findIndex(p => p.id === data.currentPlayerId));
+                            setCurrentPlayerIndex(playersArray.findIndex(p => p.id === data.currentPlayerId));
                             setGameRound(data.gameRound || 1);
                             
                             if (data.status === 'playing') {
+                                console.log('🎮 Moving to game screen');
                                 setScreen('game');
                             } else if (data.status === 'finished') {
                                 setScreen('gameOver');
                             } else if (data.status === 'waiting') {
                                 setScreen('waiting');
                             }
+                        } else {
+                            console.log('❌ No data received from Firebase');
                         }
                     });
 
-                    return () => gameRef.current.off('value', unsubscribe);
+                    return () => {
+                        console.log('🔌 Stopping Firebase listener');
+                        gameRef.current.off('value', unsubscribe);
+                    };
+                } else {
+                    console.log('❌ Missing gameId or gameRef:', { gameId, hasRef: !!gameRef.current });
                 }
             }, [gameId]);
 
