@@ -28,17 +28,15 @@
     
     <script type="text/babel">
         // ⚠️ החלף את ההגדרות האלה עם ההגדרות שלך מFirebase!
-const firebaseConfig = {
-  apiKey: "AIzaSyAgWTlNnhRHQ_iGt10EgFuxkib-Z-ifa7s",
-  authDomain: "noam-s-dice-game.firebaseapp.com",
-  databaseURL: "https://noam-s-dice-game-default-rtdb.europe-west1.firebasedatabase.app",
-  projectId: "noam-s-dice-game",
-  storageBucket: "noam-s-dice-game.firebasestorage.app",
-  messagingSenderId: "504625659348",
-  appId: "1:504625659348:web:718a1b6b6317bf45cdea41",
-  measurementId: "G-H0P3KWLM1P"
-};
-
+        const firebaseConfig = {
+            apiKey: "YOUR_API_KEY",
+            authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+            databaseURL: "https://YOUR_PROJECT_ID-default-rtdb.firebaseio.com/",
+            projectId: "YOUR_PROJECT_ID",
+            storageBucket: "YOUR_PROJECT_ID.appspot.com",
+            messagingSenderId: "YOUR_SENDER_ID",
+            appId: "YOUR_APP_ID"
+        };
 
         // Initialize Firebase
         let database = null;
@@ -106,6 +104,11 @@ const firebaseConfig = {
                             setGameData(data);
                             if (data.players) {
                                 setConnectedPlayers(Object.values(data.players));
+                            }
+                            
+                            // Check if game is finished and show game over screen
+                            if (data.status === 'finished') {
+                                setScreen('gameOver');
                             }
                         }
                     };
@@ -319,9 +322,10 @@ const firebaseConfig = {
                             
                             setIsRolling(false);
                             
-                            setTimeout(() => {
+                            // Check if this is the game owner and handle next turn
+                            setTimeout(async () => {
                                 if (isGameOwner) {
-                                    nextTurnOnline();
+                                    await nextTurnOnline();
                                 }
                             }, 3000);
                         }, 500);
@@ -332,60 +336,75 @@ const firebaseConfig = {
             const nextTurnOnline = async () => {
                 if (!isGameOwner || !database) return;
                 
-                const gameRef = database.ref(`games/${gameRoomId}`);
-                const snapshot = await gameRef.once('value');
-                const currentGame = snapshot.val();
-                
-                if (!currentGame) return;
-                
-                const activePlayers = Object.values(currentGame.players).filter(p => !p.eliminated);
-                const playersWithRolls = activePlayers.filter(p => p.lastRoll);
-                
-                if (playersWithRolls.length === activePlayers.length && activePlayers.length > 1) {
-                    // Round complete - eliminate lowest scorer
-                    const lowestScore = Math.min(...activePlayers.map(p => p.totalScore));
-                    const playersToEliminate = activePlayers.filter(p => p.totalScore === lowestScore);
+                try {
+                    const gameRef = database.ref(`games/${gameRoomId}`);
+                    const snapshot = await gameRef.once('value');
+                    const currentGame = snapshot.val();
                     
-                    const updates = {};
-                    playersToEliminate.forEach(player => {
-                        updates[`players/${player.id}/eliminated`] = true;
-                        updates[`players/${player.id}/lastRoll`] = null;
-                    });
+                    if (!currentGame) return;
                     
-                    // Clear all lastRolls for new round
-                    Object.keys(currentGame.players).forEach(playerId => {
-                        updates[`players/${playerId}/lastRoll`] = null;
-                    });
+                    const activePlayers = Object.values(currentGame.players).filter(p => !p.eliminated);
+                    const playersWithRolls = activePlayers.filter(p => p.lastRoll);
                     
-                    await gameRef.update(updates);
+                    console.log('Active players:', activePlayers.length);
+                    console.log('Players with rolls:', playersWithRolls.length);
                     
-                    // Check again after updates
-                    const updatedSnapshot = await gameRef.once('value');
-                    const updatedGame = updatedSnapshot.val();
-                    const remaining = Object.values(updatedGame.players).filter(p => !p.eliminated);
-                    
-                    if (remaining.length <= 1) {
-                        // Game over - set winner and status
-                        await gameRef.update({
-                            status: 'finished',
-                            winner: remaining[0]?.id || null,
-                            finishedAt: Date.now()
+                    if (playersWithRolls.length === activePlayers.length && activePlayers.length > 1) {
+                        // Round complete - eliminate lowest scorer
+                        const lowestScore = Math.min(...activePlayers.map(p => p.totalScore));
+                        const playersToEliminate = activePlayers.filter(p => p.totalScore === lowestScore);
+                        
+                        console.log('Eliminating players with score:', lowestScore);
+                        
+                        const updates = {};
+                        playersToEliminate.forEach(player => {
+                            updates[`players/${player.id}/eliminated`] = true;
+                            updates[`players/${player.id}/lastRoll`] = null;
                         });
-                        return;
+                        
+                        // Clear all lastRolls for new round
+                        Object.keys(currentGame.players).forEach(playerId => {
+                            updates[`players/${playerId}/lastRoll`] = null;
+                        });
+                        
+                        await gameRef.update(updates);
+                        
+                        // Wait a bit and check again
+                        setTimeout(async () => {
+                            const updatedSnapshot = await gameRef.once('value');
+                            const updatedGame = updatedSnapshot.val();
+                            const remaining = Object.values(updatedGame.players).filter(p => !p.eliminated);
+                            
+                            console.log('Remaining players after elimination:', remaining.length);
+                            
+                            if (remaining.length <= 1) {
+                                // Game over - set winner and status
+                                console.log('Game finished! Winner:', remaining[0]?.name);
+                                await gameRef.update({
+                                    status: 'finished',
+                                    winner: remaining[0]?.id || null,
+                                    finishedAt: Date.now()
+                                });
+                                return;
+                            }
+                            
+                            // New round
+                            await gameRef.update({
+                                gameRound: currentGame.gameRound + 1,
+                                currentPlayerIndex: 0,
+                                currentDice: []
+                            });
+                        }, 1000);
+                        
+                    } else {
+                        // Move to next player
+                        const nextIndex = (currentGame.currentPlayerIndex + 1) % activePlayers.length;
+                        await gameRef.update({
+                            currentPlayerIndex: nextIndex
+                        });
                     }
-                    
-                    // New round
-                    await gameRef.update({
-                        gameRound: currentGame.gameRound + 1,
-                        currentPlayerIndex: 0,
-                        currentDice: []
-                    });
-                } else {
-                    // Move to next player
-                    const nextIndex = (currentGame.currentPlayerIndex + 1) % activePlayers.length;
-                    await gameRef.update({
-                        currentPlayerIndex: nextIndex
-                    });
+                } catch (error) {
+                    console.error('Error in nextTurnOnline:', error);
                 }
             };
 
