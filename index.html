@@ -3,27 +3,67 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>🎲 משחק הקוביות של נועם</title>
+    <title>🎲 משחק הקוביות של נועם - מקוון</title>
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Firebase SDKs -->
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+    
     <style>
         body { margin: 0; padding: 0; font-family: Arial, sans-serif; }
         .dice-roll { animation: spin 0.1s linear infinite; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
         .player-glow { box-shadow: 0 0 20px gold; animation: glow 1s ease-in-out infinite; }
         @keyframes glow { 0%, 100% { box-shadow: 0 0 20px gold; } 50% { box-shadow: 0 0 40px gold; } }
+        .online-indicator { animation: pulse 2s infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
     </style>
 </head>
 <body>
     <div id="root"></div>
     
     <script type="text/babel">
-        const { useState, useRef } = React;
+        // ⚠️ החלף את ההגדרות האלה עם ההגדרות שלך מFirebase!
+const firebaseConfig = {
+  apiKey: "AIzaSyAgWTlNnhRHQ_iGt10EgFuxkib-Z-ifa7s",
+  authDomain: "noam-s-dice-game.firebaseapp.com",
+  databaseURL: "https://noam-s-dice-game-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId: "noam-s-dice-game",
+  storageBucket: "noam-s-dice-game.firebasestorage.app",
+  messagingSenderId: "504625659348",
+  appId: "1:504625659348:web:718a1b6b6317bf45cdea41",
+  measurementId: "G-H0P3KWLM1P"
+};
+
+        // Initialize Firebase
+        let database = null;
+        try {
+            if (!firebase.apps.length) {
+                firebase.initializeApp(firebaseConfig);
+            }
+            database = firebase.database();
+        } catch (error) {
+            console.log('Firebase not configured:', error);
+        }
+
+        const { useState, useEffect, useRef } = React;
 
         function DiceGame() {
+            // Game state
             const [screen, setScreen] = useState('welcome');
+            const [gameMode, setGameMode] = useState('local');
+            const [gameRoomId, setGameRoomId] = useState('');
+            const [playerName, setPlayerName] = useState('');
+            const [playerId, setPlayerId] = useState('');
+            const [gameData, setGameData] = useState(null);
+            const [isGameOwner, setIsGameOwner] = useState(false);
+            const [connectedPlayers, setConnectedPlayers] = useState([]);
+            
+            // Local game state
             const [players, setPlayers] = useState([]);
             const [currentPlayerIndex, setCurrentPlayerIndex] = useState(0);
             const [gameRound, setGameRound] = useState(1);
@@ -47,6 +87,35 @@
                 'bg-gradient-to-br from-teal-400 to-teal-600'
             ];
 
+            // Generate unique player ID
+            useEffect(() => {
+                if (!playerId) {
+                    setPlayerId('player_' + Math.random().toString(36).substr(2, 9));
+                }
+            }, []);
+
+            // Listen to game changes when online
+            useEffect(() => {
+                if (gameMode === 'online' && gameRoomId && database) {
+                    const gameRef = database.ref(`games/${gameRoomId}`);
+                    
+                    const handleGameUpdate = (snapshot) => {
+                        const data = snapshot.val();
+                        if (data) {
+                            setGameData(data);
+                            if (data.players) {
+                                setConnectedPlayers(Object.values(data.players));
+                            }
+                        }
+                    };
+
+                    gameRef.on('value', handleGameUpdate);
+                    
+                    return () => gameRef.off('value', handleGameUpdate);
+                }
+            }, [gameMode, gameRoomId]);
+
+            // Helper Functions
             const getPlayerPosition = (index, total) => {
                 const angle = (index * 360) / Math.min(total, 10);
                 const radiusX = 45;
@@ -108,7 +177,216 @@
                 return '🎯 ללא קומבינציה';
             };
 
-            const rollDice = () => {
+            // Firebase Helper Functions
+            const createGameRoom = async () => {
+                if (!database) {
+                    alert('Firebase לא מוגדר. אנא הגדר את Firebase קודם.');
+                    return;
+                }
+
+                const roomId = Math.random().toString(36).substr(2, 6).toUpperCase();
+                const gameRef = database.ref(`games/${roomId}`);
+                
+                const initialGameData = {
+                    roomId: roomId,
+                    owner: playerId,
+                    status: 'waiting',
+                    settings: {
+                        playerCount: gameSettings.playerCount,
+                        gameType: 1
+                    },
+                    players: {
+                        [playerId]: {
+                            id: playerId,
+                            name: playerName,
+                            totalScore: 0,
+                            eliminated: false,
+                            lastRoll: null,
+                            isOnline: true,
+                            joinedAt: Date.now()
+                        }
+                    },
+                    currentPlayerIndex: 0,
+                    gameRound: 1,
+                    currentDice: [],
+                    isRolling: false,
+                    createdAt: Date.now()
+                };
+
+                try {
+                    await gameRef.set(initialGameData);
+                    setGameRoomId(roomId);
+                    setIsGameOwner(true);
+                    return roomId;
+                } catch (error) {
+                    alert('שגיאה ביצירת חדר: ' + error.message);
+                }
+            };
+
+            const joinGameRoom = async (roomId) => {
+                if (!database) {
+                    throw new Error('Firebase לא מוגדר');
+                }
+
+                const gameRef = database.ref(`games/${roomId}`);
+                const snapshot = await gameRef.once('value');
+                const gameData = snapshot.val();
+
+                if (!gameData) {
+                    throw new Error('משחק לא נמצא');
+                }
+
+                if (gameData.status !== 'waiting') {
+                    throw new Error('המשחק כבר התחיל');
+                }
+
+                const playerCount = Object.keys(gameData.players || {}).length;
+                if (playerCount >= gameData.settings.playerCount) {
+                    throw new Error('המשחק מלא');
+                }
+
+                await gameRef.child(`players/${playerId}`).set({
+                    id: playerId,
+                    name: playerName,
+                    totalScore: 0,
+                    eliminated: false,
+                    lastRoll: null,
+                    isOnline: true,
+                    joinedAt: Date.now()
+                });
+
+                setGameRoomId(roomId);
+                setIsGameOwner(false);
+            };
+
+            const startOnlineGame = async () => {
+                if (isGameOwner && gameRoomId && database) {
+                    const gameRef = database.ref(`games/${gameRoomId}`);
+                    await gameRef.update({
+                        status: 'playing',
+                        startedAt: Date.now()
+                    });
+                }
+            };
+
+            const rollDiceOnline = async () => {
+                if (!gameData || !database || isRolling) return;
+                
+                const currentPlayer = getCurrentPlayer();
+                if (!currentPlayer || currentPlayer.id !== playerId) return;
+                
+                setIsRolling(true);
+                const gameRef = database.ref(`games/${gameRoomId}`);
+                
+                await gameRef.update({ isRolling: true });
+                
+                let rollCount = 0;
+                const maxRolls = 15;
+                
+                const rollInterval = setInterval(async () => {
+                    rollCount++;
+                    const tempDice = Array.from({length: 5}, () => Math.floor(Math.random() * 6) + 1);
+                    
+                    await gameRef.update({ currentDice: tempDice });
+                    
+                    if (rollCount >= maxRolls) {
+                        clearInterval(rollInterval);
+                        
+                        setTimeout(async () => {
+                            const finalResults = Array.from({length: 5}, () => Math.floor(Math.random() * 6) + 1);
+                            const score = calculateScore(finalResults);
+                            const combination = getScoreCombination(finalResults);
+                            
+                            const playerRef = gameRef.child(`players/${playerId}`);
+                            const playerSnapshot = await playerRef.once('value');
+                            const playerData = playerSnapshot.val();
+                            
+                            await playerRef.update({
+                                totalScore: playerData.totalScore + score,
+                                lastRoll: {
+                                    dice: finalResults,
+                                    score: score,
+                                    combination: combination,
+                                    timestamp: Date.now()
+                                }
+                            });
+                            
+                            await gameRef.update({
+                                currentDice: finalResults,
+                                isRolling: false
+                            });
+                            
+                            setIsRolling(false);
+                            
+                            setTimeout(() => {
+                                if (isGameOwner) {
+                                    nextTurnOnline();
+                                }
+                            }, 3000);
+                        }, 500);
+                    }
+                }, 120);
+            };
+
+            const nextTurnOnline = async () => {
+                if (!isGameOwner || !database) return;
+                
+                const gameRef = database.ref(`games/${gameRoomId}`);
+                const snapshot = await gameRef.once('value');
+                const currentGame = snapshot.val();
+                
+                if (!currentGame) return;
+                
+                const activePlayers = Object.values(currentGame.players).filter(p => !p.eliminated);
+                const playersWithRolls = activePlayers.filter(p => p.lastRoll);
+                
+                if (playersWithRolls.length === activePlayers.length && activePlayers.length > 1) {
+                    const lowestScore = Math.min(...activePlayers.map(p => p.totalScore));
+                    const playersToEliminate = activePlayers.filter(p => p.totalScore === lowestScore);
+                    
+                    const updates = {};
+                    playersToEliminate.forEach(player => {
+                        updates[`players/${player.id}/eliminated`] = true;
+                        updates[`players/${player.id}/lastRoll`] = null;
+                    });
+                    
+                    Object.keys(currentGame.players).forEach(playerId => {
+                        updates[`players/${playerId}/lastRoll`] = null;
+                    });
+                    
+                    await gameRef.update(updates);
+                    
+                    const remaining = activePlayers.filter(p => !playersToEliminate.includes(p));
+                    if (remaining.length <= 1) {
+                        await gameRef.update({
+                            status: 'finished',
+                            winner: remaining[0]?.id,
+                            finishedAt: Date.now()
+                        });
+                        return;
+                    }
+                    
+                    await gameRef.update({
+                        gameRound: currentGame.gameRound + 1,
+                        currentPlayerIndex: 0,
+                        currentDice: []
+                    });
+                } else {
+                    const nextIndex = (currentGame.currentPlayerIndex + 1) % activePlayers.length;
+                    await gameRef.update({
+                        currentPlayerIndex: nextIndex
+                    });
+                }
+            };
+
+            const getCurrentPlayer = () => {
+                if (!gameData || !gameData.players) return null;
+                const activePlayers = Object.values(gameData.players).filter(p => !p.eliminated);
+                return activePlayers[gameData.currentPlayerIndex] || null;
+            };
+
+            // Local Game Functions
+            const rollDiceLocal = () => {
                 if (isRolling) return;
                 
                 setIsRolling(true);
@@ -143,14 +421,14 @@
                             setIsRolling(false);
                             
                             setTimeout(() => {
-                                nextTurn();
+                                nextTurnLocal();
                             }, 3000);
                         }, 500);
                     }
                 }, 120);
             };
 
-            const nextTurn = () => {
+            const nextTurnLocal = () => {
                 const activePlayers = players.filter(p => !p.eliminated);
                 const playersWithRolls = activePlayers.filter(p => p.lastRoll);
                 
@@ -185,7 +463,7 @@
                 }
             };
 
-            const addPlayer = (name) => {
+            const addPlayerLocal = (name) => {
                 if (!name || name.trim().length < 2) {
                     alert('שם השחקן חייב להיות לפחות 2 תווים');
                     return false;
@@ -215,27 +493,31 @@
 
             const resetGame = () => {
                 setScreen('welcome');
+                setGameMode('local');
+                setGameRoomId('');
+                setGameData(null);
+                setConnectedPlayers([]);
+                setIsGameOwner(false);
                 setPlayers([]);
                 setCurrentPlayerIndex(0);
                 setGameRound(1);
                 setDiceResults([]);
                 setIsFirstPlayer(true);
                 setGameSettings({ playerCount: 2, gameType: 1 });
+                setPlayerName('');
             };
 
-            const handleAddPlayer = (inputElement) => {
-                if (inputElement.value.trim()) {
-                    if (addPlayer(inputElement.value.trim())) {
-                        inputElement.value = '';
-                        if (players.length + 1 < gameSettings.playerCount) {
-                            setIsFirstPlayer(false);
-                        }
-                    }
-                } else {
-                    alert('אנא הכנס שם');
+            // Auto-transition to game when online game starts
+            useEffect(() => {
+                if (gameMode === 'online' && gameData?.status === 'playing' && screen === 'waitingRoom') {
+                    setScreen('game');
                 }
-            };
+            }, [gameData?.status, gameMode, screen]);
 
+            // Main render function
+            const rollDice = gameMode === 'online' ? rollDiceOnline : rollDiceLocal;
+
+            // Rules Component
             if (showRules) {
                 return (
                     <div className="min-h-screen bg-gradient-to-br from-green-800 to-green-900 flex items-center justify-center p-4">
@@ -283,6 +565,7 @@
                 );
             }
 
+            // Welcome Screen
             if (screen === 'welcome') {
                 return (
                     <div className="min-h-screen bg-gradient-to-br from-green-800 to-green-900 flex items-center justify-center p-4">
@@ -291,16 +574,39 @@
                             <h2 className="text-3xl font-bold text-green-800 mb-2">משחק הקוביות</h2>
                             <h3 className="text-xl text-green-600 mb-8">של נועם</h3>
                             
-                            <button 
-                                onClick={() => setScreen('setup')}
-                                className="bg-green-600 hover:bg-green-700 text-white font-bold py-4 px-8 rounded-lg text-xl w-full transition-all duration-300 transform hover:scale-105 mb-4"
-                            >
-                                👥 התחל משחק חדש
-                            </button>
+                            <div className="space-y-4">
+                                {database ? (
+                                    <button 
+                                        onClick={() => {
+                                            setGameMode('online');
+                                            setScreen('nameEntry');
+                                        }}
+                                        className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 px-8 rounded-lg text-xl w-full transition-all duration-300 transform hover:scale-105 mb-2"
+                                    >
+                                        🌐 משחק מקוון
+                                    </button>
+                                ) : (
+                                    <div className="bg-yellow-100 border border-yellow-400 text-yellow-800 px-4 py-3 rounded mb-4">
+                                        <div className="text-sm">
+                                            ⚠️ Firebase לא מוגדר - רק משחק מקומי זמין
+                                        </div>
+                                    </div>
+                                )}
+                                
+                                <button 
+                                    onClick={() => {
+                                        setGameMode('local');
+                                        setScreen('setup');
+                                    }}
+                                    className="bg-green-600 hover:bg-green-700 text-white font-bold py-4 px-8 rounded-lg text-xl w-full transition-all duration-300 transform hover:scale-105"
+                                >
+                                    🏠 משחק מקומי
+                                </button>
+                            </div>
                             
                             <button 
                                 onClick={() => setShowRules(true)}
-                                className="text-green-600 hover:text-green-700 underline"
+                                className="text-green-600 hover:text-green-700 underline mt-4"
                             >
                                 📋 הוראות המשחק
                             </button>
@@ -309,11 +615,191 @@
                 );
             }
 
+            // Name Entry for Online
+            if (screen === 'nameEntry') {
+                return (
+                    <div className="min-h-screen bg-gradient-to-br from-green-800 to-green-900 flex items-center justify-center p-4">
+                        <div className="text-center bg-white rounded-xl p-8 shadow-2xl max-w-md w-full">
+                            <h2 className="text-2xl font-bold text-gray-800 mb-6">🌐 משחק מקוון</h2>
+                            
+                            <div className="mb-6">
+                                <label className="block text-gray-700 font-bold mb-2">הכנס את שמך</label>
+                                <input 
+                                    type="text"
+                                    value={playerName}
+                                    onChange={(e) => setPlayerName(e.target.value)}
+                                    placeholder="השם שלך"
+                                    className="w-full p-3 border-2 border-gray-300 rounded-lg text-center focus:border-blue-500 focus:outline-none"
+                                    maxLength="15"
+                                    onKeyPress={(e) => {
+                                        if (e.key === 'Enter' && playerName.trim()) {
+                                            setScreen('onlineMenu');
+                                        }
+                                    }}
+                                />
+                            </div>
+                            
+                            <button 
+                                onClick={() => playerName.trim() && setScreen('onlineMenu')}
+                                disabled={!playerName.trim()}
+                                className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white font-bold py-3 px-8 rounded-lg w-full mb-4 transition-all duration-300"
+                            >
+                                המשך
+                            </button>
+                            
+                            <button 
+                                onClick={() => setScreen('welcome')}
+                                className="text-gray-500 hover:text-gray-700"
+                            >
+                                ← חזור
+                            </button>
+                        </div>
+                    </div>
+                );
+            }
+
+            // Online Menu
+            if (screen === 'onlineMenu') {
+                return (
+                    <div className="min-h-screen bg-gradient-to-br from-green-800 to-green-900 flex items-center justify-center p-4">
+                        <div className="text-center bg-white rounded-xl p-8 shadow-2xl max-w-md w-full">
+                            <h2 className="text-2xl font-bold text-gray-800 mb-2">שלום {playerName}! 👋</h2>
+                            <p className="text-gray-600 mb-6">בחר איך תרצה לשחק:</p>
+                            
+                            <div className="space-y-4">
+                                <button 
+                                    onClick={async () => {
+                                        try {
+                                            const roomId = await createGameRoom();
+                                            if (roomId) {
+                                                setScreen('waitingRoom');
+                                            }
+                                        } catch (error) {
+                                            alert('שגיאה ביצירת חדר: ' + error.message);
+                                        }
+                                    }}
+                                    className="bg-green-600 hover:bg-green-700 text-white font-bold py-4 px-8 rounded-lg text-lg w-full transition-all duration-300 transform hover:scale-105"
+                                >
+                                    🏠 צור חדר משחק חדש
+                                </button>
+                                
+                                <div className="border-t pt-4">
+                                    <label className="block text-gray-700 font-bold mb-2">או הצטרף לחדר קיים:</label>
+                                    <div className="flex gap-2">
+                                        <input 
+                                            type="text"
+                                            placeholder="קוד החדר"
+                                            className="flex-1 p-3 border-2 border-gray-300 rounded-lg text-center focus:border-blue-500 focus:outline-none uppercase"
+                                            maxLength="6"
+                                            value={gameRoomId}
+                                            onChange={(e) => setGameRoomId(e.target.value.toUpperCase())}
+                                        />
+                                        <button 
+                                            onClick={async () => {
+                                                if (!gameRoomId) {
+                                                    alert('הכנס קוד חדר');
+                                                    return;
+                                                }
+                                                try {
+                                                    await joinGameRoom(gameRoomId);
+                                                    setScreen('waitingRoom');
+                                                } catch (error) {
+                                                    alert('שגיאה בהצטרפות: ' + error.message);
+                                                }
+                                            }}
+                                            className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg transition-all duration-300"
+                                        >
+                                            הצטרף
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <button 
+                                onClick={() => setScreen('welcome')}
+                                className="text-gray-500 hover:text-gray-700 mt-6"
+                            >
+                                ← חזור
+                            </button>
+                        </div>
+                    </div>
+                );
+            }
+
+            // Waiting Room
+            if (screen === 'waitingRoom') {
+                return (
+                    <div className="min-h-screen bg-gradient-to-br from-green-800 to-green-900 flex items-center justify-center p-4">
+                        <div className="text-center bg-white rounded-xl p-8 shadow-2xl max-w-md w-full">
+                            <h2 className="text-2xl font-bold text-gray-800 mb-4">🏠 חדר המתנה</h2>
+                            
+                            <div className="bg-green-100 rounded-lg p-4 mb-6">
+                                <div className="text-lg font-bold text-green-800">קוד החדר:</div>
+                                <div className="text-3xl font-bold text-green-600 tracking-widest">{gameRoomId}</div>
+                                <div className="text-sm text-green-700 mt-2">שתף את הקוד הזה עם החברים שלך!</div>
+                            </div>
+                            
+                            <div className="mb-6">
+                                <h3 className="font-bold text-lg mb-3">שחקנים מחוברים:</h3>
+                                <div className="space-y-2">
+                                    {connectedPlayers.map((player, index) => (
+                                        <div key={player.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                                            <div className="flex items-center gap-2">
+                                                <span>{avatarEmojis[index]}</span>
+                                                <span className="font-medium">{player.name}</span>
+                                                {player.id === playerId && <span className="text-blue-600">(אתה)</span>}
+                                                {gameData?.owner === player.id && <span className="text-green-600">👑</span>}
+                                            </div>
+                                            <div className="online-indicator w-3 h-3 bg-green-500 rounded-full"></div>
+                                        </div>
+                                    ))}
+                                </div>
+                                
+                                <div className="text-sm text-gray-600 mt-3">
+                                    {connectedPlayers.length}/{gameData?.settings?.playerCount || 2} שחקנים
+                                </div>
+                            </div>
+                            
+                            {isGameOwner && connectedPlayers.length >= 2 && (
+                                <button 
+                                    onClick={async () => {
+                                        await startOnlineGame();
+                                        setScreen('game');
+                                    }}
+                                    className="bg-green-600 hover:bg-green-700 text-white font-bold py-4 px-8 rounded-lg text-lg w-full transition-all duration-300 transform hover:scale-105 mb-4"
+                                >
+                                    🚀 התחל משחק!
+                                </button>
+                            )}
+                            
+                            {!isGameOwner && (
+                                <div className="bg-blue-100 rounded-lg p-4 mb-4">
+                                    <div className="text-blue-800">⏳ ממתין שמנהל החדר יתחיל את המשחק...</div>
+                                </div>
+                            )}
+                            
+                            <button 
+                                onClick={() => {
+                                    if (gameRoomId && database) {
+                                        database.ref(`games/${gameRoomId}/players/${playerId}`).remove();
+                                    }
+                                    resetGame();
+                                }}
+                                className="text-red-500 hover:text-red-700"
+                            >
+                                🚪 עזוב חדר
+                            </button>
+                        </div>
+                    </div>
+                );
+            }
+
+            // Local Setup Screen
             if (screen === 'setup') {
                 return (
                     <div className="min-h-screen bg-gradient-to-br from-green-800 to-green-900 flex items-center justify-center p-4">
                         <div className="text-center bg-white rounded-xl p-8 shadow-2xl max-w-md w-full">
-                            <h2 className="text-2xl font-bold text-gray-800 mb-6">🎮 הגדרת משחק</h2>
+                            <h2 className="text-2xl font-bold text-gray-800 mb-6">🏠 משחק מקומי</h2>
                             
                             {isFirstPlayer && (
                                 <div className="mb-6">
@@ -341,8 +827,13 @@
                                     className="w-full p-3 border-2 border-gray-300 rounded-lg text-center focus:border-green-500 focus:outline-none"
                                     maxLength="15"
                                     onKeyPress={(e) => {
-                                        if (e.key === 'Enter') {
-                                            handleAddPlayer(e.target);
+                                        if (e.key === 'Enter' && e.target.value.trim()) {
+                                            if (addPlayerLocal(e.target.value.trim())) {
+                                                e.target.value = '';
+                                                if (players.length + 1 < gameSettings.playerCount) {
+                                                    setIsFirstPlayer(false);
+                                                }
+                                            }
                                         }
                                     }}
                                 />
@@ -351,7 +842,16 @@
                             <button 
                                 onClick={() => {
                                     const input = document.getElementById('playerNameInput');
-                                    handleAddPlayer(input);
+                                    if (input && input.value.trim()) {
+                                        if (addPlayerLocal(input.value.trim())) {
+                                            input.value = '';
+                                            if (players.length + 1 < gameSettings.playerCount) {
+                                                setIsFirstPlayer(false);
+                                            }
+                                        }
+                                    } else {
+                                        alert('אנא הכנס שם');
+                                    }
                                 }}
                                 className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-8 rounded-lg w-full mb-4 transition-all duration-300 transform hover:scale-105"
                             >
@@ -390,7 +890,16 @@
                 );
             }
 
+            // Main Game Screen
             if (screen === 'game') {
+                const currentPlayers = gameMode === 'online' ? connectedPlayers : players;
+                const currentIndex = gameMode === 'online' ? gameData?.currentPlayerIndex || 0 : currentPlayerIndex;
+                const currentRound = gameMode === 'online' ? gameData?.gameRound || 1 : gameRound;
+                const currentDice = gameMode === 'online' ? gameData?.currentDice || [] : diceResults;
+                const currentPlayer = gameMode === 'online' ? getCurrentPlayer() : currentPlayers[currentIndex];
+                const isMyTurn = gameMode === 'online' ? currentPlayer?.id === playerId : true;
+                const gameIsRolling = gameMode === 'online' ? gameData?.isRolling || false : isRolling;
+
                 return (
                     <div className="min-h-screen bg-gradient-to-br from-green-800 to-green-900 p-4">
                         <div className="w-full max-w-6xl mx-auto">
@@ -404,19 +913,31 @@
                                 </button>
 
                                 <div className="text-center text-white bg-black bg-opacity-30 rounded-xl px-6 py-3">
-                                    <h2 className="text-xl font-bold">🎲 סיבוב {gameRound}</h2>
-                                    <p className="text-sm">תור: <span className="font-bold text-yellow-300">{players[currentPlayerIndex]?.name}</span></p>
+                                    <h2 className="text-xl font-bold">
+                                        🎲 סיבוב {currentRound}
+                                        {gameMode === 'online' && <span className="text-green-300 ml-2">🌐</span>}
+                                    </h2>
+                                    <p className="text-sm">
+                                        תור: <span className="font-bold text-yellow-300">{currentPlayer?.name}</span>
+                                        {gameMode === 'online' && isMyTurn && <span className="text-green-300"> (שלך!)</span>}
+                                    </p>
+                                    {gameMode === 'online' && (
+                                        <p className="text-xs text-gray-300">חדר: {gameRoomId}</p>
+                                    )}
                                 </div>
 
                                 <button
                                     onClick={() => {
-                                        if (confirm('האם אתה בטוח שתרצה לאפס את המשחק?')) {
+                                        if (confirm('האם אתה בטוח שתרצה לעזוב את המשחק?')) {
+                                            if (gameMode === 'online' && gameRoomId && database) {
+                                                database.ref(`games/${gameRoomId}/players/${playerId}`).remove();
+                                            }
                                             resetGame();
                                         }
                                     }}
                                     className="bg-white rounded-full p-3 shadow-lg hover:shadow-xl transition-all duration-300"
                                 >
-                                    🔄
+                                    🚪
                                 </button>
                             </div>
 
@@ -425,33 +946,37 @@
                                 <div className="w-full h-full bg-green-600 rounded-full border-8 border-yellow-600 shadow-2xl" style={{borderRadius: '50%/40%'}}>
                                     
                                     {/* Players */}
-                                    {players.map((player, index) => {
-                                        const pos = getPlayerPosition(index, players.length);
-                                        const isCurrentPlayer = index === currentPlayerIndex;
+                                    {currentPlayers.map((player, index) => {
+                                        const pos = getPlayerPosition(index, currentPlayers.length);
+                                        const isCurrentPlayerTurn = gameMode === 'online' ? 
+                                            (getCurrentPlayer()?.id === player.id) : 
+                                            (index === currentIndex);
                                         const isEliminated = player.eliminated;
+                                        const isMe = gameMode === 'online' ? player.id === playerId : false;
                                         
                                         return (
-                                            <div key={player.id}>
+                                            <div key={player.id || index}>
                                                 <div
                                                     className={`absolute transform -translate-x-1/2 -translate-y-1/2 text-center transition-all duration-500 z-10 ${
                                                         isEliminated ? 'opacity-30 grayscale' : ''
-                                                    } ${isCurrentPlayer && !isEliminated ? 'scale-110' : ''}`}
+                                                    } ${isCurrentPlayerTurn && !isEliminated ? 'scale-110' : ''}`}
                                                     style={{ left: pos.x, top: pos.y }}
                                                 >
                                                     <div className={`w-20 h-20 ${avatarGradients[index]} rounded-full flex items-center justify-center text-3xl mb-2 shadow-lg border-4 border-white transition-all duration-500 ${
-                                                        isCurrentPlayer && !isEliminated ? 'player-glow' : ''
-                                                    }`}>
+                                                        isCurrentPlayerTurn && !isEliminated ? 'player-glow' : ''
+                                                    } ${isMe ? 'ring-4 ring-blue-400' : ''}`}>
                                                         {isEliminated ? '💀' : avatarEmojis[index]}
                                                     </div>
                                                     
                                                     <div className={`text-white text-sm font-bold mb-1 ${
-                                                        isCurrentPlayer && !isEliminated ? 'text-yellow-300' : ''
+                                                        isCurrentPlayerTurn && !isEliminated ? 'text-yellow-300' : ''
                                                     }`}>
                                                         {player.name}
+                                                        {isMe && <span className="text-blue-300"> (אתה)</span>}
                                                     </div>
                                                     
                                                     <div className="text-yellow-300 text-sm font-bold">
-                                                        {player.totalScore.toLocaleString()} נק'
+                                                        {(player.totalScore || 0).toLocaleString()} נק'
                                                     </div>
                                                     
                                                     {player.lastRoll && !isEliminated && (
@@ -468,7 +993,7 @@
                                                         className="absolute transform -translate-x-1/2 -translate-y-1/2 z-10"
                                                         style={{ 
                                                             left: `${parseFloat(pos.x) + (index % 2 === 0 ? 8 : -8)}%`, 
-                                                            top: `${parseFloat(pos.y) + (index < players.length/2 ? 4 : -4)}%` 
+                                                            top: `${parseFloat(pos.y) + (index < currentPlayers.length/2 ? 4 : -4)}%` 
                                                         }}
                                                     >
                                                         <div className="flex gap-1">
@@ -489,13 +1014,13 @@
 
                                     {/* Central Dice */}
                                     <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-30">
-                                        {diceResults.length > 0 && isRolling && (
+                                        {currentDice.length > 0 && gameIsRolling && (
                                             <div className="flex gap-3 mb-6">
-                                                {diceResults.map((dice, index) => (
+                                                {currentDice.map((dice, index) => (
                                                     <div
                                                         key={index}
                                                         className={`w-16 h-16 bg-white rounded-xl flex items-center justify-center text-3xl font-bold shadow-2xl ${
-                                                            isRolling ? 'dice-roll' : ''
+                                                            gameIsRolling ? 'dice-roll' : ''
                                                         }`}
                                                     >
                                                         {dice}
@@ -504,7 +1029,7 @@
                                             </div>
                                         )}
                                         
-                                        {!isRolling && !players[currentPlayerIndex]?.lastRoll ? (
+                                        {!gameIsRolling && ((gameMode === 'online' && isMyTurn) || (gameMode === 'local')) && !currentPlayer?.lastRoll ? (
                                             <button
                                                 onClick={rollDice}
                                                 className="bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white font-bold py-5 px-10 rounded-xl shadow-lg transition-all duration-300 transform hover:scale-105"
@@ -513,20 +1038,29 @@
                                                     <span className="text-3xl">🎲</span>
                                                     <div>
                                                         <div className="text-xl">זרוק קוביות</div>
-                                                        <div className="text-sm opacity-90">{players[currentPlayerIndex]?.name}</div>
+                                                        <div className="text-sm opacity-90">
+                                                            {gameMode === 'online' ? 'התור שלך!' : currentPlayer?.name}
+                                                        </div>
                                                     </div>
                                                     <span className="text-3xl">🎲</span>
                                                 </div>
                                             </button>
-                                        ) : isRolling ? (
+                                        ) : gameIsRolling ? (
                                             <div className="text-white font-bold text-xl bg-black bg-opacity-70 rounded-xl px-8 py-6">
                                                 <div className="flex items-center gap-4">
                                                     <span className="text-4xl animate-spin">🎲</span>
                                                     <div>
                                                         <div className="text-2xl">זורק קוביות...</div>
-                                                        <div className="text-sm">{players[currentPlayerIndex]?.name}</div>
+                                                        <div className="text-sm">{currentPlayer?.name}</div>
                                                     </div>
                                                     <span className="text-4xl animate-spin">🎲</span>
+                                                </div>
+                                            </div>
+                                        ) : (gameMode === 'online' && !isMyTurn) ? (
+                                            <div className="text-white font-bold text-lg bg-blue-900 bg-opacity-80 rounded-xl px-6 py-4">
+                                                <div className="text-center">
+                                                    <div className="text-sm">תור של {currentPlayer?.name}...</div>
+                                                    <div>⏳</div>
                                                 </div>
                                             </div>
                                         ) : (
@@ -543,25 +1077,31 @@
 
                             {/* Leaderboard */}
                             <div className="mt-6 bg-white bg-opacity-10 rounded-xl p-4 max-w-md mx-auto">
-                                <h3 className="text-white font-bold text-center mb-3">🏆 לוח תוצאות</h3>
+                                <h3 className="text-white font-bold text-center mb-3">
+                                    🏆 לוח תוצאות
+                                    {gameMode === 'online' && <span className="text-green-300 ml-2">🌐</span>}
+                                </h3>
                                 <div className="space-y-2">
-                                    {players
+                                    {currentPlayers
                                         .filter(p => !p.eliminated)
-                                        .sort((a, b) => b.totalScore - a.totalScore)
+                                        .sort((a, b) => (b.totalScore || 0) - (a.totalScore || 0))
                                         .map((player, index) => (
-                                            <div key={player.id} className={`flex items-center justify-between p-2 rounded-lg ${
+                                            <div key={player.id || index} className={`flex items-center justify-between p-2 rounded-lg ${
                                                 index === 0 ? 'bg-yellow-500 bg-opacity-30' : 
                                                 index === 1 ? 'bg-gray-400 bg-opacity-30' : 
                                                 index === 2 ? 'bg-orange-500 bg-opacity-30' : 
                                                 'bg-white bg-opacity-10'
-                                            }`}>
+                                            } ${gameMode === 'online' && player.id === playerId ? 'ring-2 ring-blue-400' : ''}`}>
                                                 <div className="flex items-center gap-2">
                                                     <span className="text-lg">
                                                         {index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : `${index + 1}.`}
                                                     </span>
-                                                    <span className="text-white font-bold">{player.name}</span>
+                                                    <span className="text-white font-bold">
+                                                        {player.name}
+                                                        {gameMode === 'online' && player.id === playerId && ' (אתה)'}
+                                                    </span>
                                                 </div>
-                                                <span className="text-white font-bold">{player.totalScore.toLocaleString()}</span>
+                                                <span className="text-white font-bold">{(player.totalScore || 0).toLocaleString()}</span>
                                             </div>
                                         ))}
                                 </div>
@@ -571,46 +1111,57 @@
                 );
             }
 
-            if (screen === 'gameOver') {
+            // Game Over Screen
+            if (screen === 'gameOver' || (gameMode === 'online' && gameData?.status === 'finished')) {
+                const winner = gameMode === 'online' ? 
+                    connectedPlayers.find(p => p.id === gameData?.winner) : 
+                    players.find(p => !p.eliminated);
+
                 return (
                     <div className="min-h-screen bg-gradient-to-br from-green-800 to-green-900 flex items-center justify-center p-4">
                         <div className="text-center bg-white rounded-xl p-8 shadow-2xl max-w-lg w-full">
                             <div className="text-8xl mb-6 animate-bounce">🏆</div>
                             <h2 className="text-4xl font-bold text-yellow-600 mb-4">
-                                {players.find(p => !p.eliminated)?.name}
+                                {winner?.name}
                             </h2>
                             <p className="text-2xl text-gray-700 mb-2">🎉 מנצח! 🎉</p>
                             <p className="text-xl text-gray-600 mb-6">
                                 ניקוד סופי: <span className="font-bold text-green-600">
-                                    {players.find(p => !p.eliminated)?.totalScore.toLocaleString()}
+                                    {(winner?.totalScore || 0).toLocaleString()}
                                 </span> נקודות
                             </p>
                             
                             <div className="bg-gray-50 rounded-lg p-4 mb-6">
                                 <h3 className="font-bold text-lg mb-3">🏅 דירוג סופי</h3>
                                 <div className="space-y-2">
-                                    {players
-                                        .sort((a, b) => b.totalScore - a.totalScore)
+                                    {(gameMode === 'online' ? connectedPlayers : players)
+                                        .sort((a, b) => (b.totalScore || 0) - (a.totalScore || 0))
                                         .map((player, index) => (
-                                            <div key={player.id} className={`flex items-center justify-between p-2 rounded ${
+                                            <div key={player.id || index} className={`flex items-center justify-between p-2 rounded ${
                                                 !player.eliminated ? 'bg-yellow-200' : 'bg-gray-200'
-                                            }`}>
+                                            } ${gameMode === 'online' && player.id === playerId ? 'ring-2 ring-blue-400' : ''}`}>
                                                 <div className="flex items-center gap-2">
                                                     <span>
                                                         {index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : `${index + 1}.`}
                                                     </span>
                                                     <span className={!player.eliminated ? 'font-bold' : 'line-through'}>
                                                         {player.name}
+                                                        {gameMode === 'online' && player.id === playerId && ' (אתה)'}
                                                     </span>
                                                 </div>
-                                                <span className="font-bold">{player.totalScore.toLocaleString()}</span>
+                                                <span className="font-bold">{(player.totalScore || 0).toLocaleString()}</span>
                                             </div>
                                         ))}
                                 </div>
                             </div>
                             
                             <button
-                                onClick={resetGame}
+                                onClick={() => {
+                                    if (gameMode === 'online' && gameRoomId && database) {
+                                        database.ref(`games/${gameRoomId}/players/${playerId}`).remove();
+                                    }
+                                    resetGame();
+                                }}
                                 className="bg-green-600 hover:bg-green-700 text-white font-bold py-4 px-8 rounded-lg w-full transition-all duration-300 transform hover:scale-105 flex items-center justify-center gap-3"
                             >
                                 🔄
