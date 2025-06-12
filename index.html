@@ -114,6 +114,29 @@ const firebaseConfig = {
                                 
                                 console.log('Active players count:', activePlayers.length);
                                 console.log('Active players:', activePlayers.map(p => p.name));
+                                
+                                // מנגנון אוטומטי למעבר תורות - בדיקה אם כל השחקנים זרקו אבל התור לא עבר
+                                if (data.status === 'playing' && !data.isRolling) {
+                                    const playersWithRolls = activePlayers.filter(p => p.lastRoll);
+                                    
+                                    // אם כל השחקנים זרקו במהלך הסיבוב הנוכחי אבל התור לא עבר
+                                    if (playersWithRolls.length === activePlayers.length && activePlayers.length > 1) {
+                                        console.log('🚨 All players have rolled but turn didnt advance - forcing check');
+                                        setTimeout(async () => {
+                                            await checkAndAdvanceTurn();
+                                        }, 2000);
+                                    }
+                                    // אם יש שחקנים שלא זרקו אבל השחקן הנוכחי כבר זרק
+                                    else if (playersWithRolls.length < activePlayers.length) {
+                                        const currentPlayer = activePlayers[data.currentPlayerIndex];
+                                        if (currentPlayer && currentPlayer.lastRoll) {
+                                            console.log('🚨 Current player already rolled but turn didnt advance - forcing check');
+                                            setTimeout(async () => {
+                                                await checkAndAdvanceTurn();
+                                            }, 2000);
+                                        }
+                                    }
+                                }
                             }
                             
                             // Check if game is finished and show game over screen
@@ -299,10 +322,16 @@ const firebaseConfig = {
             const startOnlineGame = async () => {
                 if (isGameOwner && gameRoomId && database) {
                     const gameRef = database.ref(`games/${gameRoomId}`);
+                    console.log('🚀 Starting online game as owner');
                     await gameRef.update({
                         status: 'playing',
                         startedAt: Date.now()
                     });
+                } else {
+                    console.log('❌ Cannot start game - not owner or missing requirements');
+                    console.log('Is game owner:', isGameOwner);
+                    console.log('Game room ID:', gameRoomId);
+                    console.log('Database:', !!database);
                 }
             };
 
@@ -358,8 +387,20 @@ const firebaseConfig = {
                             // התיקון העיקרי: עיכוב יותר קצר ובדיקה מיידית לחילופי תור
                             setTimeout(async () => {
                                 console.log('Player finished rolling, checking next turn...');
+                                console.log('Is game owner?', isGameOwner);
+                                console.log('Player ID:', playerId);
+                                console.log('Game owner ID:', gameData?.owner);
+                                
+                                // בדיקה נוספת - גם אם לא owner, עדיין נסה לעדכן לאחר מעט זמן
                                 if (isGameOwner) {
+                                    console.log('Owner calling checkAndAdvanceTurn immediately');
                                     await checkAndAdvanceTurn();
+                                } else {
+                                    console.log('Not owner, but will trigger fallback check in 3 seconds');
+                                    setTimeout(async () => {
+                                        console.log('Fallback: checking if turn should advance...');
+                                        await checkAndAdvanceTurn();
+                                    }, 3000);
                                 }
                             }, 1000);
                         }, 500);
@@ -369,8 +410,8 @@ const firebaseConfig = {
 
             // תיקון הפונקציה לבדיקת חילופי תורות
             const checkAndAdvanceTurn = async () => {
-                if (!database || !gameRoomId || !isGameOwner) {
-                    console.log('❌ Cannot advance turn - missing requirements');
+                if (!database || !gameRoomId) {
+                    console.log('❌ Cannot advance turn - missing database or room ID');
                     return;
                 }
                 
@@ -391,22 +432,34 @@ const firebaseConfig = {
                     console.log('Active players:', activePlayers.length);
                     console.log('Players with rolls:', playersWithRolls.length);
                     console.log('Current player index:', currentGame.currentPlayerIndex);
+                    console.log('Am I the game owner?', isGameOwner);
+                    console.log('Game owner:', currentGame.owner);
                     
                     // בדיקה שהאינדקס תקין
                     if (currentGame.currentPlayerIndex >= activePlayers.length) {
-                        console.log('⚠️ Invalid player index, resetting to 0');
-                        await gameRef.update({ currentPlayerIndex: 0 });
+                        console.log('⚠️ Invalid player index, only owner can reset');
+                        if (isGameOwner) {
+                            await gameRef.update({ currentPlayerIndex: 0 });
+                        }
                         return;
                     }
                     
                     // בדיקה אם כל השחקנים הפעילים זרקו - הגיע הזמן לסיבוב חדש
                     if (playersWithRolls.length === activePlayers.length && activePlayers.length > 1) {
                         console.log('All players rolled - starting new round');
-                        await nextTurnOnline();
+                        if (isGameOwner) {
+                            await nextTurnOnline();
+                        } else {
+                            console.log('Not owner - cannot start new round');
+                        }
                     } else if (playersWithRolls.length < activePlayers.length) {
                         // עדיין יש שחקנים שלא זרקו - מעבר לשחקן הבא
                         console.log('Moving to next player who hasnt rolled');
-                        await moveToNextPlayerOnline();
+                        if (isGameOwner) {
+                            await moveToNextPlayerOnline();
+                        } else {
+                            console.log('Not owner - cannot move to next player');
+                        }
                     }
                 } catch (error) {
                     console.error('Error in checkAndAdvanceTurn:', error);
