@@ -396,27 +396,38 @@ const firebaseConfig = {
             };
 
             const nextTurnOnline = async () => {
-                if (!isGameOwner || !database) return;
+                if (!isGameOwner || !database) {
+                    console.log('Not game owner or no database, skipping turn advance');
+                    return;
+                }
                 
                 try {
                     const gameRef = database.ref(`games/${gameRoomId}`);
                     const snapshot = await gameRef.once('value');
                     const currentGame = snapshot.val();
                     
-                    if (!currentGame) return;
+                    if (!currentGame) {
+                        console.log('No current game data');
+                        return;
+                    }
                     
                     const activePlayers = Object.values(currentGame.players).filter(p => !p.eliminated);
                     const playersWithRolls = activePlayers.filter(p => p.lastRoll);
                     
+                    console.log('=== Turn Analysis ===');
                     console.log('Active players:', activePlayers.length);
                     console.log('Players with rolls:', playersWithRolls.length);
+                    console.log('Current player index:', currentGame.currentPlayerIndex);
+                    console.log('Active players list:', activePlayers.map(p => p.name));
                     
                     if (playersWithRolls.length === activePlayers.length && activePlayers.length > 1) {
                         // Round complete - eliminate lowest scorer
                         const lowestScore = Math.min(...activePlayers.map(p => p.totalScore));
                         const playersToEliminate = activePlayers.filter(p => p.totalScore === lowestScore);
                         
+                        console.log('=== Round Complete ===');
                         console.log('Eliminating players with score:', lowestScore);
+                        console.log('Players to eliminate:', playersToEliminate.map(p => p.name));
                         
                         const updates = {};
                         playersToEliminate.forEach(player => {
@@ -437,11 +448,14 @@ const firebaseConfig = {
                             const updatedGame = updatedSnapshot.val();
                             const remaining = Object.values(updatedGame.players).filter(p => !p.eliminated);
                             
-                            console.log('Remaining players after elimination:', remaining.length);
+                            console.log('=== After Elimination ===');
+                            console.log('Remaining players:', remaining.length);
+                            console.log('Remaining players list:', remaining.map(p => p.name));
                             
                             if (remaining.length <= 1) {
                                 // Game over - set winner and status
-                                console.log('Game finished! Winner:', remaining[0]?.name);
+                                console.log('=== Game Finished! ===');
+                                console.log('Winner:', remaining[0]?.name);
                                 await gameRef.update({
                                     status: 'finished',
                                     winner: remaining[0]?.id || null,
@@ -450,17 +464,33 @@ const firebaseConfig = {
                                 return;
                             }
                             
-                            // New round
+                            // New round - start with first remaining player
+                            console.log('=== Starting New Round ===');
                             await gameRef.update({
                                 gameRound: currentGame.gameRound + 1,
-                                currentPlayerIndex: 0,
+                                currentPlayerIndex: 0, // Always start new round with index 0
                                 currentDice: []
                             });
                         }, 1000);
                         
-                    } else {
-                        // Move to next player
-                        const nextIndex = (currentGame.currentPlayerIndex + 1) % activePlayers.length;
+                    } else if (playersWithRolls.length < activePlayers.length) {
+                        // Not all players have rolled yet - move to next player who hasn't rolled
+                        let nextIndex = (currentGame.currentPlayerIndex + 1) % activePlayers.length;
+                        
+                        // Find next player who hasn't rolled yet
+                        let attempts = 0;
+                        while (attempts < activePlayers.length) {
+                            const nextPlayer = activePlayers[nextIndex];
+                            if (nextPlayer && !nextPlayer.lastRoll) {
+                                console.log('=== Moving to Next Player ===');
+                                console.log('Next player index:', nextIndex);
+                                console.log('Next player name:', nextPlayer.name);
+                                break;
+                            }
+                            nextIndex = (nextIndex + 1) % activePlayers.length;
+                            attempts++;
+                        }
+                        
                         await gameRef.update({
                             currentPlayerIndex: nextIndex
                         });
@@ -712,6 +742,19 @@ const firebaseConfig = {
                     <div className="min-h-screen bg-gradient-to-br from-green-800 to-green-900 flex items-center justify-center p-4">
                         <div className="text-center bg-white rounded-xl p-8 shadow-2xl max-w-md w-full">
                             <h2 className="text-2xl font-bold text-gray-800 mb-6">🌐 משחק מקוון</h2>
+                            
+                            <div className="mb-6">
+                                <label className="block text-gray-700 font-bold mb-2">כמות שחקנים</label>
+                                <select 
+                                    value={gameSettings.playerCount}
+                                    onChange={(e) => setGameSettings({...gameSettings, playerCount: parseInt(e.target.value)})}
+                                    className="w-full p-3 border-2 border-gray-300 rounded-lg text-center focus:border-blue-500 focus:outline-none mb-4"
+                                >
+                                    {[2,3,4,5,6,7,8,9].map(n => (
+                                        <option key={n} value={n}>{n} שחקנים</option>
+                                    ))}
+                                </select>
+                            </div>
                             
                             <div className="mb-6">
                                 <label className="block text-gray-700 font-bold mb-2">הכנס את שמך</label>
