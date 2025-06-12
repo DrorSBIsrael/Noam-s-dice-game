@@ -103,20 +103,42 @@ const firebaseConfig = {
                     const handleGameUpdate = (snapshot) => {
                         const data = snapshot.val();
                         if (data) {
+                            console.log('=== Firebase Update ===');
+                            console.log('Game status:', data.status);
+                            console.log('Current player index:', data.currentPlayerIndex);
+                            console.log('Is rolling:', data.isRolling);
+                            
                             setGameData(data);
                             if (data.players) {
+                                const activePlayers = Object.values(data.players).filter(p => !p.eliminated);
                                 setConnectedPlayers(Object.values(data.players));
                                 
+                                console.log('Active players count:', activePlayers.length);
+                                console.log('Active players:', activePlayers.map(p => p.name));
+                                
+                                // Check if current player index is valid
+                                if (data.currentPlayerIndex >= activePlayers.length) {
+                                    console.log('⚠️ Invalid player index detected! Fixing...');
+                                    if (isGameOwner) {
+                                        // Fix invalid index
+                                        gameRef.update({
+                                            currentPlayerIndex: 0
+                                        });
+                                    }
+                                    return;
+                                }
+                                
                                 // Check if we need to advance turn (fallback mechanism)
-                                const activePlayers = Object.values(data.players).filter(p => !p.eliminated);
                                 const playersWithRolls = activePlayers.filter(p => p.lastRoll);
+                                
+                                console.log('Players with rolls:', playersWithRolls.length);
                                 
                                 if (data.status === 'playing' && 
                                     playersWithRolls.length === activePlayers.length && 
                                     activePlayers.length > 0 && 
                                     !data.isRolling) {
                                     
-                                    console.log('Firebase update: All players rolled, checking turn advance...');
+                                    console.log('🔄 All players rolled, triggering turn advance...');
                                     
                                     // Add delay to prevent multiple triggers
                                     setTimeout(() => {
@@ -130,7 +152,7 @@ const firebaseConfig = {
                             
                             // Check if game is finished and show game over screen
                             if (data.status === 'finished') {
-                                console.log('Game finished detected, showing game over screen');
+                                console.log('🏆 Game finished detected, showing game over screen');
                                 setScreen('gameOver');
                             }
                         }
@@ -397,7 +419,7 @@ const firebaseConfig = {
 
             const nextTurnOnline = async () => {
                 if (!isGameOwner || !database) {
-                    console.log('Not game owner or no database, skipping turn advance');
+                    console.log('❌ Not game owner or no database, skipping turn advance');
                     return;
                 }
                 
@@ -407,7 +429,7 @@ const firebaseConfig = {
                     const currentGame = snapshot.val();
                     
                     if (!currentGame) {
-                        console.log('No current game data');
+                        console.log('❌ No current game data');
                         return;
                     }
                     
@@ -415,10 +437,20 @@ const firebaseConfig = {
                     const playersWithRolls = activePlayers.filter(p => p.lastRoll);
                     
                     console.log('=== Turn Analysis ===');
-                    console.log('Active players:', activePlayers.length);
-                    console.log('Players with rolls:', playersWithRolls.length);
-                    console.log('Current player index:', currentGame.currentPlayerIndex);
-                    console.log('Active players list:', activePlayers.map(p => p.name));
+                    console.log('🎮 Active players count:', activePlayers.length);
+                    console.log('🎲 Players with rolls:', playersWithRolls.length);
+                    console.log('📍 Current player index:', currentGame.currentPlayerIndex);
+                    console.log('👥 Active players:', activePlayers.map((p, i) => `${i}: ${p.name}`));
+                    console.log('🎯 Current player:', activePlayers[currentGame.currentPlayerIndex]?.name);
+                    
+                    // Validate current player index
+                    if (currentGame.currentPlayerIndex >= activePlayers.length) {
+                        console.log('⚠️ Invalid player index! Fixing to 0');
+                        await gameRef.update({
+                            currentPlayerIndex: 0
+                        });
+                        return;
+                    }
                     
                     if (playersWithRolls.length === activePlayers.length && activePlayers.length > 1) {
                         // Round complete - eliminate lowest scorer
@@ -426,8 +458,8 @@ const firebaseConfig = {
                         const playersToEliminate = activePlayers.filter(p => p.totalScore === lowestScore);
                         
                         console.log('=== Round Complete ===');
-                        console.log('Eliminating players with score:', lowestScore);
-                        console.log('Players to eliminate:', playersToEliminate.map(p => p.name));
+                        console.log('💀 Eliminating players with score:', lowestScore);
+                        console.log('📋 Players to eliminate:', playersToEliminate.map(p => p.name));
                         
                         const updates = {};
                         playersToEliminate.forEach(player => {
@@ -442,20 +474,20 @@ const firebaseConfig = {
                         
                         await gameRef.update(updates);
                         
-                        // Wait a bit and check again
+                        // Wait and check for game end
                         setTimeout(async () => {
                             const updatedSnapshot = await gameRef.once('value');
                             const updatedGame = updatedSnapshot.val();
                             const remaining = Object.values(updatedGame.players).filter(p => !p.eliminated);
                             
                             console.log('=== After Elimination ===');
-                            console.log('Remaining players:', remaining.length);
-                            console.log('Remaining players list:', remaining.map(p => p.name));
+                            console.log('🏃 Remaining players:', remaining.length);
+                            console.log('📝 Remaining players list:', remaining.map(p => p.name));
                             
                             if (remaining.length <= 1) {
-                                // Game over - set winner and status
-                                console.log('=== Game Finished! ===');
-                                console.log('Winner:', remaining[0]?.name);
+                                // Game over
+                                console.log('🏆 Game Finished!');
+                                console.log('👑 Winner:', remaining[0]?.name);
                                 await gameRef.update({
                                     status: 'finished',
                                     winner: remaining[0]?.id || null,
@@ -464,46 +496,68 @@ const firebaseConfig = {
                                 return;
                             }
                             
-                            // New round - start with first remaining player
-                            console.log('=== Starting New Round ===');
+                            // New round - always start with index 0
+                            console.log('🔄 Starting New Round');
+                            console.log('🎯 Setting player index to 0');
                             await gameRef.update({
                                 gameRound: currentGame.gameRound + 1,
-                                currentPlayerIndex: 0, // Always start new round with index 0
+                                currentPlayerIndex: 0,
                                 currentDice: []
                             });
                         }, 1000);
                         
                     } else if (playersWithRolls.length < activePlayers.length) {
-                        // Not all players have rolled yet - move to next player who hasn't rolled
+                        // Not all players have rolled - move to next player who hasn't rolled
+                        console.log('⏭️ Moving to next player who hasn\'t rolled');
+                        
                         let nextIndex = (currentGame.currentPlayerIndex + 1) % activePlayers.length;
+                        let attempts = 0;
+                        let foundNextPlayer = false;
                         
                         // Find next player who hasn't rolled yet
-                        let attempts = 0;
                         while (attempts < activePlayers.length) {
                             const nextPlayer = activePlayers[nextIndex];
-                            if (nextPlayer && !nextPlayer.lastRoll) {
-                                console.log('=== Moving to Next Player ===');
-                                console.log('Next player index:', nextIndex);
-                                console.log('Next player name:', nextPlayer.name);
+                            if (nextPlayer && !nextPlayer.lastRoll && !nextPlayer.eliminated) {
+                                console.log('✅ Found next player:');
+                                console.log('🎯 Next player index:', nextIndex);
+                                console.log('👤 Next player name:', nextPlayer.name);
+                                foundNextPlayer = true;
                                 break;
                             }
                             nextIndex = (nextIndex + 1) % activePlayers.length;
                             attempts++;
                         }
                         
-                        await gameRef.update({
-                            currentPlayerIndex: nextIndex
-                        });
+                        if (foundNextPlayer) {
+                            await gameRef.update({
+                                currentPlayerIndex: nextIndex
+                            });
+                        } else {
+                            console.log('⚠️ No valid next player found, resetting to 0');
+                            await gameRef.update({
+                                currentPlayerIndex: 0
+                            });
+                        }
+                    } else {
+                        console.log('🤔 Unexpected state in nextTurnOnline');
+                        console.log('Players with rolls >= active players, but not handling elimination');
                     }
                 } catch (error) {
-                    console.error('Error in nextTurnOnline:', error);
+                    console.error('❌ Error in nextTurnOnline:', error);
                 }
             };
 
             const getCurrentPlayer = () => {
                 if (!gameData || !gameData.players) return null;
                 const activePlayers = Object.values(gameData.players).filter(p => !p.eliminated);
-                return activePlayers[gameData.currentPlayerIndex] || null;
+                const currentPlayer = activePlayers[gameData.currentPlayerIndex];
+                
+                console.log('=== getCurrentPlayer Debug ===');
+                console.log('Active players:', activePlayers.map(p => p.name));
+                console.log('Current player index:', gameData.currentPlayerIndex);
+                console.log('Current player:', currentPlayer?.name);
+                
+                return currentPlayer || null;
             };
 
             // Local Game Functions
