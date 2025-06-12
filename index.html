@@ -106,10 +106,31 @@ const firebaseConfig = {
                             setGameData(data);
                             if (data.players) {
                                 setConnectedPlayers(Object.values(data.players));
+                                
+                                // Check if we need to advance turn (fallback mechanism)
+                                const activePlayers = Object.values(data.players).filter(p => !p.eliminated);
+                                const playersWithRolls = activePlayers.filter(p => p.lastRoll);
+                                
+                                if (data.status === 'playing' && 
+                                    playersWithRolls.length === activePlayers.length && 
+                                    activePlayers.length > 0 && 
+                                    !data.isRolling) {
+                                    
+                                    console.log('Firebase update: All players rolled, checking turn advance...');
+                                    
+                                    // Add delay to prevent multiple triggers
+                                    setTimeout(() => {
+                                        if (isGameOwner) {
+                                            console.log('Owner detected all rolled, advancing turn...');
+                                            nextTurnOnline();
+                                        }
+                                    }, 1000);
+                                }
                             }
                             
                             // Check if game is finished and show game over screen
                             if (data.status === 'finished') {
+                                console.log('Game finished detected, showing game over screen');
                                 setScreen('gameOver');
                             }
                         }
@@ -119,7 +140,7 @@ const firebaseConfig = {
                     
                     return () => gameRef.off('value', handleGameUpdate);
                 }
-            }, [gameMode, gameRoomId]);
+            }, [gameMode, gameRoomId, isGameOwner]);
 
             // Helper Functions
             const getPlayerPosition = (index, total) => {
@@ -324,15 +345,54 @@ const firebaseConfig = {
                             
                             setIsRolling(false);
                             
-                            // Check if this is the game owner and handle next turn
+                            // Always trigger next turn check after any roll
                             setTimeout(async () => {
-                                if (isGameOwner) {
-                                    await nextTurnOnline();
-                                }
-                            }, 3000);
+                                console.log('Player finished rolling, checking next turn...');
+                                await checkAndAdvanceTurn();
+                            }, 2000);
                         }, 500);
                     }
                 }, 120);
+            };
+
+            // New function to check if we should advance turn
+            const checkAndAdvanceTurn = async () => {
+                if (!database || !gameRoomId) return;
+                
+                const gameRef = database.ref(`games/${gameRoomId}`);
+                const snapshot = await gameRef.once('value');
+                const currentGame = snapshot.val();
+                
+                if (!currentGame) return;
+                
+                const activePlayers = Object.values(currentGame.players).filter(p => !p.eliminated);
+                const playersWithRolls = activePlayers.filter(p => p.lastRoll);
+                
+                console.log('Checking turn advance:');
+                console.log('Active players:', activePlayers.length);
+                console.log('Players with rolls:', playersWithRolls.length);
+                console.log('Is game owner:', isGameOwner);
+                
+                // If all active players have rolled, trigger next turn
+                if (playersWithRolls.length === activePlayers.length) {
+                    console.log('All players have rolled, triggering next turn...');
+                    if (isGameOwner) {
+                        await nextTurnOnline();
+                    } else {
+                        // If not owner, still trigger the check (fallback)
+                        console.log('Not owner, but all rolled - requesting turn advance');
+                        // Add a small delay and check again
+                        setTimeout(async () => {
+                            const newSnapshot = await gameRef.once('value');
+                            const newGame = newSnapshot.val();
+                            if (newGame && newGame.status === 'playing') {
+                                // Game is still playing but might be stuck
+                                console.log('Game seems stuck, forcing next turn check');
+                                await nextTurnOnline();
+                            }
+                        }, 3000);
+                    }
+                }
             };
 
             const nextTurnOnline = async () => {
