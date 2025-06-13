@@ -384,29 +384,50 @@ const firebaseConfig = {
                             
                             setIsRolling(false);
                             
-                            // התיקון העיקרי: עיכוב יותר קצר ובדיקה מיידית לחילופי תור
-                            setTimeout(async () => {
-                                console.log('Player finished rolling, checking next turn...');
-                                console.log('Is game owner?', isGameOwner);
-                                console.log('Player ID:', playerId);
-                                console.log('Game owner ID:', gameData?.owner);
-                                
-                                // בדיקה נוספת - גם אם לא owner, עדיין נסה לעדכן לאחר מעט זמן
-                                if (isGameOwner) {
-                                    console.log('Owner calling checkAndAdvanceTurn immediately');
-                                    await checkAndAdvanceTurn();
-                                } else {
-                                    console.log('Not owner, but will trigger fallback check in 3 seconds');
-                                    setTimeout(async () => {
-                                        console.log('Fallback: checking if turn should advance...');
-                                        await checkAndAdvanceTurn();
-                                    }, 3000);
-                                }
-                            }, 1000);
-                        }, 500);
-                    }
-                }, 120);
-            };
+// גרסה מלאה עם fallback אוניברסלי להעברת תור במצב מקוון
+// יש לשלב בקובץ הקיים בתוך rollDiceOnline או בסוף הזריקה (setTimeout האחרון)
+
+setTimeout(async () => {
+  if (!database || !gameRoomId) return;
+
+  try {
+    const gameRef = database.ref(`games/${gameRoomId}`);
+    const snapshot = await gameRef.once('value');
+    const currentGame = snapshot.val();
+
+    if (!currentGame || currentGame.status !== 'playing') return;
+
+    const activePlayers = Object.values(currentGame.players).filter(p => !p.eliminated);
+    const playersWithRolls = activePlayers.filter(p => p.lastRoll);
+
+    // אם כל השחקנים זרקו, והמשחק לא התקדם – כל שחקן יכול לעזור לקדם תור
+    if (playersWithRolls.length === activePlayers.length) {
+      console.log('[⏳] כל השחקנים זרקו – נסיון להזיז תור');
+      await checkAndAdvanceTurn();
+    } else {
+      // תור תקוע – השחקן הנוכחי כבר זרק ועדיין אין מעבר תור
+      const currentPlayer = activePlayers[currentGame.currentPlayerIndex];
+      if (currentPlayer?.lastRoll) {
+        console.log('[⏳] השחקן הנוכחי כבר זרק – מנסים לקדם תור');
+        await checkAndAdvanceTurn();
+      }
+    }
+  } catch (error) {
+    console.error('[שגיאה] בבדיקת התקדמות תור:', error);
+  }
+}, 5000); // בדיקה לאחר 5 שניות
+
+// ⬇️ יש להוסיף את זה בתוך rollDiceOnline לאחר עדכון תוצאת הקוביות וסיום isRolling:
+
+/*
+setTimeout(async () => {
+  const finalResults = [...];
+  ...
+  setIsRolling(false);
+
+  // ⬇️ כאן נכנס הקוד הזה
+}, 500);
+*/
 
             // תיקון הפונקציה לבדיקת חילופי תורות
             const checkAndAdvanceTurn = async () => {
