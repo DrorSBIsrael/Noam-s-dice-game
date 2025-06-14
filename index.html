@@ -658,49 +658,6 @@ const getCurrentPlayer = () => {
                 }, 120);
             };
 
-
-
-
-// פונקציה לסיום סיבוב ופסילת שחקנים
-const endRoundAndEliminateFixed = async (gameRef, currentGame, activePlayers) => {
-    try {
-        // מציאת הניקוד הנמוך ביותר
-        const lowestScore = Math.min(...activePlayers.map(p => p.totalScore || 0));
-        const playersToEliminate = activePlayers.filter(p => (p.totalScore || 0) === lowestScore);
-        
-        console.log('💀 Eliminating players with score:', lowestScore);
-        console.log('Players to eliminate:', playersToEliminate.map(p => p.name));
-        
-        const updates = {};
-        
-        // פסילת שחקנים
-        playersToEliminate.forEach(player => {
-            updates[`players/${player.id}/eliminated`] = true;
-        });
-        
-        // ניקוי כל הזריקות
-        Object.keys(currentGame.players).forEach(playerId => {
-            updates[`players/${playerId}/lastRoll`] = null;
-        });
-        
-        // התחלת סיבוב חדש
-        const remainingPlayers = activePlayers.filter(p => !playersToEliminate.includes(p));
-        
-        updates['gameRound'] = (currentGame.gameRound || 1) + 1;
-        updates['currentPlayerIndex'] = 0;
-        updates['currentDice'] = [];
-        updates['isRolling'] = false;
-        
-        await gameRef.update(updates);
-        
-        console.log('✅ Round ended, new round started');
-        
-    } catch (error) {
-        console.error('Error in endRoundAndEliminateFixed:', error);
-    }
-};
-
-
 // פונקציה מתוקנת לסיום סיבוב - עובד עבור כל השחקנים
 const endRoundAndEliminateFixed = async (gameRef, currentGame, activePlayers) => {
     try {
