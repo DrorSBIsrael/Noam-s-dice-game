@@ -123,7 +123,7 @@ const firebaseConfig = {
                                     if (playersWithRolls.length === activePlayers.length && activePlayers.length > 1) {
                                         console.log('🚨 All players have rolled but turn didnt advance - forcing check');
                                         setTimeout(async () => {
-                                            await checkAndAdvanceTurn();
+                                            await checkAndAdvanceTurnFixed();
                                         }, 2000);
                                     }
                                     // אם יש שחקנים שלא זרקו אבל השחקן הנוכחי כבר זרק
@@ -132,7 +132,7 @@ const firebaseConfig = {
                                         if (currentPlayer && currentPlayer.lastRoll) {
                                             console.log('🚨 Current player already rolled but turn didnt advance - forcing check');
                                             setTimeout(async () => {
-                                                await checkAndAdvanceTurn();
+                                                await checkAndAdvanceTurnFixed();
                                             }, 2000);
                                         }
                                     }
@@ -319,97 +319,130 @@ const firebaseConfig = {
                 setIsGameOwner(false);
             };
 
-            const startOnlineGame = async () => {
-                if (isGameOwner && gameRoomId && database) {
-                    const gameRef = database.ref(`games/${gameRoomId}`);
-                    console.log('🚀 Starting online game as owner');
-                    await gameRef.update({
-                        status: 'playing',
-                        startedAt: Date.now()
-                    });
-                } else {
-                    console.log('❌ Cannot start game - not owner or missing requirements');
-                    console.log('Is game owner:', isGameOwner);
-                    console.log('Game room ID:', gameRoomId);
-                    console.log('Database:', !!database);
-                }
-            };
+// פונקציה מתוקנת להתחלת המשחק המקוון
+const startOnlineGame = async () => {
+    if (!isGameOwner || !gameRoomId || !database) {
+        console.log('❌ Cannot start game - not owner or missing requirements');
+        return;
+    }
+    
+    try {
+        const gameRef = database.ref(`games/${gameRoomId}`);
+        const snapshot = await gameRef.once('value');
+        const gameData = snapshot.val();
+        
+        if (!gameData) {
+            console.log('❌ No game data found');
+            return;
+        }
+        
+        const activePlayers = Object.values(gameData.players).filter(p => !p.eliminated);
+        
+        if (activePlayers.length < 2) {
+            alert('צריך לפחות 2 שחקנים כדי להתחיל');
+            return;
+        }
+        
+        console.log('🚀 Starting online game with', activePlayers.length, 'players');
+        
+        await gameRef.update({
+            status: 'playing',
+            currentPlayerIndex: 0,
+            gameRound: 1,
+            isRolling: false,
+            startedAt: Date.now()
+        });
+        
+        console.log('✅ Game started successfully');
+        
+    } catch (error) {
+        console.error('Error starting online game:', error);
+        alert('שגיאה בהתחלת המשחק: ' + error.message);
+    }
+};
 
-            const rollDiceOnline = async () => {
-                if (!gameData || !database || isRolling) return;
+// פונקציה מתוקנת לזריקת קוביות מקוונת
+const rollDiceOnline = async () => {
+    if (!gameData || !database || isRolling) return;
+    
+    const currentPlayer = getCurrentPlayer();
+    if (!currentPlayer || currentPlayer.id !== playerId) {
+        console.log('❌ Not your turn or invalid player');
+        return;
+    }
+    
+    // בדיקה אם השחקן כבר זרק
+    if (currentPlayer.lastRoll) {
+        console.log('❌ Player already rolled this round');
+        return;
+    }
+    
+    setIsRolling(true);
+    const gameRef = database.ref(`games/${gameRoomId}`);
+    
+    try {
+        // נעיל את הזריקה
+        await gameRef.update({ isRolling: true });
+        
+        let rollCount = 0;
+        const maxRolls = 15;
+        
+        const rollInterval = setInterval(async () => {
+            rollCount++;
+            const tempDice = Array.from({length: 5}, () => Math.floor(Math.random() * 6) + 1);
+            
+            await gameRef.update({ currentDice: tempDice });
+            
+            if (rollCount >= maxRolls) {
+                clearInterval(rollInterval);
                 
-                const currentPlayer = getCurrentPlayer();
-                if (!currentPlayer || currentPlayer.id !== playerId) return;
-                
-                setIsRolling(true);
-                const gameRef = database.ref(`games/${gameRoomId}`);
-                
-                await gameRef.update({ isRolling: true });
-                
-                let rollCount = 0;
-                const maxRolls = 15;
-                
-                const rollInterval = setInterval(async () => {
-                    rollCount++;
-                    const tempDice = Array.from({length: 5}, () => Math.floor(Math.random() * 6) + 1);
+                // זריקה סופית
+                setTimeout(async () => {
+                    const finalResults = Array.from({length: 5}, () => Math.floor(Math.random() * 6) + 1);
+                    const score = calculateScore(finalResults);
+                    const combination = getScoreCombination(finalResults);
                     
-                    await gameRef.update({ currentDice: tempDice });
+                    // עדכון נתוני השחקן
+                    const playerRef = gameRef.child(`players/${playerId}`);
+                    const playerSnapshot = await playerRef.once('value');
+                    const playerData = playerSnapshot.val();
                     
-                    if (rollCount >= maxRolls) {
-                        clearInterval(rollInterval);
-                        
+                    await playerRef.update({
+                        totalScore: (playerData.totalScore || 0) + score,
+                        lastRoll: {
+                            dice: finalResults,
+                            score: score,
+                            combination: combination,
+                            timestamp: Date.now()
+                        }
+                    });
+                    
+                    await gameRef.update({
+                        currentDice: finalResults,
+                        isRolling: false
+                    });
+                    
+                    setIsRolling(false);
+                    
+                    // רק בעל החדר מתחיל בדיקת תור
+                    if (isGameOwner) {
                         setTimeout(async () => {
-                            const finalResults = Array.from({length: 5}, () => Math.floor(Math.random() * 6) + 1);
-                            const score = calculateScore(finalResults);
-                            const combination = getScoreCombination(finalResults);
-                            
-                            const playerRef = gameRef.child(`players/${playerId}`);
-                            const playerSnapshot = await playerRef.once('value');
-                            const playerData = playerSnapshot.val();
-                            
-                            await playerRef.update({
-                                totalScore: playerData.totalScore + score,
-                                lastRoll: {
-                                    dice: finalResults,
-                                    score: score,
-                                    combination: combination,
-                                    timestamp: Date.now()
-                                }
-                            });
-                            
-                            await gameRef.update({
-                                currentDice: finalResults,
-                                isRolling: false
-                            });
-                            
-                            setIsRolling(false);
-                            
-                            // התיקון העיקרי: עיכוב יותר קצר ובדיקה מיידית לחילופי תור
-                            setTimeout(async () => {
-                                console.log('Player finished rolling, checking next turn...');
-                                console.log('Is game owner?', isGameOwner);
-                                console.log('Player ID:', playerId);
-                                console.log('Game owner ID:', gameData?.owner);
-                                
-                                // בדיקה נוספת - גם אם לא owner, עדיין נסה לעדכן לאחר מעט זמן
-                                if (isGameOwner) {
-                                    console.log('Owner calling checkAndAdvanceTurn immediately');
-                                    await checkAndAdvanceTurn();
-                                } else {
-                                    console.log('Not owner, but will trigger fallback check in 3 seconds');
-                                    setTimeout(async () => {
-                                        console.log('Fallback: checking if turn should advance...');
-                                        await checkAndAdvanceTurn();
-                                    }, 3000);
-                                }
-                            }, 1000);
-                        }, 500);
+                            await checkAndAdvanceTurnFixed();
+                        }, 1500);
                     }
-                }, 120);
-            };
+                }, 500);
+            }
+        }, 120);
+        
+    } catch (error) {
+        console.error('Error in rollDiceOnline:', error);
+        setIsRolling(false);
+        await gameRef.update({ isRolling: false });
+    }
+  };
 
             // תיקון הפונקציה לבדיקת חילופי תורות
-            const checkAndAdvanceTurn = async () => {
+            const checkAndAdvanceTurnFixed = async () => {
                 if (!database || !gameRoomId) {
                     console.log('❌ Cannot advance turn - missing database or room ID');
                     return;
@@ -462,7 +495,7 @@ const firebaseConfig = {
                         }
                     }
                 } catch (error) {
-                    console.error('Error in checkAndAdvanceTurn:', error);
+                    console.error('Error in checkAndAdvanceTurnFixed:', error);
                 }
             };
 
@@ -564,25 +597,33 @@ const firebaseConfig = {
                 }
             };
 
-            const getCurrentPlayer = () => {
-                if (!gameData || !gameData.players) return null;
-                const activePlayers = Object.values(gameData.players).filter(p => !p.eliminated);
-                
-                // בדיקת תקינות האינדקס
-                if (gameData.currentPlayerIndex < 0 || gameData.currentPlayerIndex >= activePlayers.length) {
-                    console.log('⚠️ Invalid player index detected:', gameData.currentPlayerIndex, 'for', activePlayers.length, 'players');
-                    return null;
-                }
-                
-                const currentPlayer = activePlayers[gameData.currentPlayerIndex];
-                
-                console.log('=== getCurrentPlayer Debug ===');
-                console.log('Active players:', activePlayers.map(p => p.name));
-                console.log('Current player index:', gameData.currentPlayerIndex);
-                console.log('Current player:', currentPlayer?.name);
-                
-                return currentPlayer || null;
-            };
+// פונקציה מתוקנת לקבלת השחקן הנוכחי
+const getCurrentPlayer = () => {
+    if (!gameData || !gameData.players) {
+        console.log('❌ No game data or players');
+        return null;
+    }
+    
+    const activePlayers = Object.values(gameData.players)
+        .filter(p => !p.eliminated)
+        .sort((a, b) => a.joinedAt - b.joinedAt); // מיון קבוע לפי סדר הצטרפות
+    
+    const currentIndex = gameData.currentPlayerIndex || 0;
+    
+    if (currentIndex < 0 || currentIndex >= activePlayers.length) {
+        console.log('⚠️ Invalid player index:', currentIndex, 'for', activePlayers.length, 'players');
+        return null;
+    }
+    
+    const currentPlayer = activePlayers[currentIndex];
+    
+    console.log('=== Current Player Debug ===');
+    console.log('Active players:', activePlayers.map(p => p.name));
+    console.log('Current index:', currentIndex);
+    console.log('Current player:', currentPlayer?.name);
+    
+    return currentPlayer;
+};
 
             // Local Game Functions - תיקון גם למשחק מקומי
             const rollDiceLocal = () => {
@@ -627,6 +668,72 @@ const firebaseConfig = {
                     }
                 }, 120);
             };
+
+// פונקציה לסיום סיבוב ופסילת שחקנים
+const endRoundAndEliminate = async (gameRef, currentGame, activePlayers) => {
+    try {
+        // מציאת הניקוד הנמוך ביותר
+        const lowestScore = Math.min(...activePlayers.map(p => p.totalScore || 0));
+        const playersToEliminate = activePlayers.filter(p => (p.totalScore || 0) === lowestScore);
+        
+        console.log('💀 Eliminating players with score:', lowestScore);
+        console.log('Players to eliminate:', playersToEliminate.map(p => p.name));
+        
+        const updates = {};
+        
+        // פסילת שחקנים
+        playersToEliminate.forEach(player => {
+            updates[`players/${player.id}/eliminated`] = true;
+        });
+        
+        // ניקוי כל הזריקות
+        Object.keys(currentGame.players).forEach(playerId => {
+            updates[`players/${playerId}/lastRoll`] = null;
+        });
+        
+        // התחלת סיבוב חדש
+        const remainingPlayers = activePlayers.filter(p => !playersToEliminate.includes(p));
+        
+        updates['gameRound'] = (currentGame.gameRound || 1) + 1;
+        updates['currentPlayerIndex'] = 0;
+        updates['currentDice'] = [];
+        updates['isRolling'] = false;
+        
+        await gameRef.update(updates);
+        
+        console.log('✅ Round ended, new round started');
+        
+    } catch (error) {
+        console.error('Error in endRoundAndEliminate:', error);
+    }
+};
+
+// פונקציה למעבר לשחקן הבא
+const moveToNextPlayer = async (gameRef, currentGame, activePlayers) => {
+    try {
+        const currentIndex = currentGame.currentPlayerIndex || 0;
+        
+        // חיפוש השחקן הבא שלא זרק עדיין
+        for (let i = 1; i <= activePlayers.length; i++) {
+            const nextIndex = (currentIndex + i) % activePlayers.length;
+            const nextPlayer = activePlayers[nextIndex];
+            
+            if (nextPlayer && !nextPlayer.lastRoll && !nextPlayer.eliminated) {
+                console.log('Moving to player:', nextPlayer.name, 'at index:', nextIndex);
+                await gameRef.update({
+                    currentPlayerIndex: nextIndex,
+                    isRolling: false
+                });
+                return;
+            }
+        }
+        
+        console.log('⚠️ No valid next player found');
+        
+    } catch (error) {
+        console.error('Error in moveToNextPlayer:', error);
+    }
+};
 
             const nextTurnLocal = () => {
                 const activePlayers = players.filter(p => !p.eliminated);
