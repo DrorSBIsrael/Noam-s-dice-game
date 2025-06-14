@@ -109,40 +109,13 @@ const firebaseConfig = {
                             
                             setGameData(data);
                             if (data.players) {
-                                const activePlayers = Object.values(data.players).filter(p => !p.eliminated);
                                 setConnectedPlayers(Object.values(data.players));
                                 
-                                console.log('Active players count:', activePlayers.length);
-                                console.log('Active players:', activePlayers.map(p => p.name));
-                                
-                                // מנגנון אוטומטי למעבר תורות - בדיקה אם כל השחקנים זרקו אבל התור לא עבר
-                                if (data.status === 'playing' && !data.isRolling) {
-                                    const playersWithRolls = activePlayers.filter(p => p.lastRoll);
-                                    
-                                    // אם כל השחקנים זרקו במהלך הסיבוב הנוכחי אבל התור לא עבר
-                                    if (playersWithRolls.length === activePlayers.length && activePlayers.length > 1) {
-                                        console.log('🚨 All players have rolled but turn didnt advance - forcing check');
-                                        setTimeout(async () => {
-                                            await checkAndAdvanceTurnFixed();
-                                        }, 2000);
-                                    }
-                                    // אם יש שחקנים שלא זרקו אבל השחקן הנוכחי כבר זרק
-                                    else if (playersWithRolls.length < activePlayers.length) {
-                                        const currentPlayer = activePlayers[data.currentPlayerIndex];
-                                        if (currentPlayer && currentPlayer.lastRoll) {
-                                            console.log('🚨 Current player already rolled but turn didnt advance - forcing check');
-                                            setTimeout(async () => {
-                                                await checkAndAdvanceTurnFixed();
-                                            }, 2000);
-                                        }
-                                    }
+                                // Check if game is finished and show game over screen
+                                if (data.status === 'finished') {
+                                    console.log('🏆 Game finished detected, showing game over screen');
+                                    setScreen('gameOver');
                                 }
-                            }
-                            
-                            // Check if game is finished and show game over screen
-                            if (data.status === 'finished') {
-                                console.log('🏆 Game finished detected, showing game over screen');
-                                setScreen('gameOver');
                             }
                         }
                     };
@@ -164,12 +137,10 @@ const firebaseConfig = {
             };
 
             const calculateScore = (dice) => {
-                // בדיקת קלט תקין
                 if (!dice || !Array.isArray(dice) || dice.length === 0) {
                     return 0;
                 }
                 
-                // סינון קוביות תקינות (1-6)
                 const validDice = dice.filter(d => d >= 1 && d <= 6);
                 if (validDice.length === 0) {
                     return 0;
@@ -211,12 +182,10 @@ const firebaseConfig = {
             };
 
             const getScoreCombination = (dice) => {
-                // בדיקת קלט תקין
                 if (!dice || !Array.isArray(dice) || dice.length === 0) {
                     return '🎯 ללא קומבינציה';
                 }
                 
-                // סינון קוביות תקינות (1-6)
                 const validDice = dice.filter(d => d >= 1 && d <= 6);
                 if (validDice.length === 0) {
                     return '🎯 ללא קומבינציה';
@@ -235,6 +204,25 @@ const firebaseConfig = {
                 if (values[0] === 2 && values[1] === 2) return '👥 זוג כפול';
                 if (values[0] === 2) return '👫 זוג';
                 return '🎯 ללא קומבינציה';
+            };
+
+            // פונקציה מתוקנת לקבלת השחקן הנוכחי
+            const getCurrentPlayer = () => {
+                if (!gameData || !gameData.players) {
+                    return null;
+                }
+                
+                const activePlayers = Object.values(gameData.players)
+                    .filter(p => !p.eliminated)
+                    .sort((a, b) => a.joinedAt - b.joinedAt);
+                
+                const currentIndex = gameData.currentPlayerIndex || 0;
+                
+                if (currentIndex < 0 || currentIndex >= activePlayers.length) {
+                    return null;
+                }
+                
+                return activePlayers[currentIndex];
             };
 
             // Firebase Helper Functions
@@ -319,214 +307,125 @@ const firebaseConfig = {
                 setIsGameOwner(false);
             };
 
-// פונקציה מתוקנת להתחלת המשחק המקוון
-const startOnlineGame = async () => {
-    if (!isGameOwner || !gameRoomId || !database) {
-        console.log('❌ Cannot start game - not owner or missing requirements');
-        return;
-    }
-    
-    try {
-        const gameRef = database.ref(`games/${gameRoomId}`);
-        const snapshot = await gameRef.once('value');
-        const gameData = snapshot.val();
-        
-        if (!gameData) {
-            console.log('❌ No game data found');
-            return;
-        }
-        
-        const activePlayers = Object.values(gameData.players).filter(p => !p.eliminated);
-        
-        if (activePlayers.length < 2) {
-            alert('צריך לפחות 2 שחקנים כדי להתחיל');
-            return;
-        }
-        
-        console.log('🚀 Starting online game with', activePlayers.length, 'players');
-        
-        await gameRef.update({
-            status: 'playing',
-            currentPlayerIndex: 0,
-            gameRound: 1,
-            isRolling: false,
-            startedAt: Date.now()
-        });
-        
-        console.log('✅ Game started successfully');
-        
-    } catch (error) {
-        console.error('Error starting online game:', error);
-        alert('שגיאה בהתחלת המשחק: ' + error.message);
-    }
-};
-
-// פונקציה מתוקנת לזריקת קוביות - עם מנגנון גיבוי משופר
-const rollDiceOnline = async () => {
-    if (!gameData || !database || isRolling) return;
-    
-    const currentPlayer = getCurrentPlayer();
-    if (!currentPlayer || currentPlayer.id !== playerId) {
-        console.log('❌ Not your turn or invalid player');
-        return;
-    }
-    
-    // בדיקה אם השחקן כבר זרק
-    if (currentPlayer.lastRoll) {
-        console.log('❌ Player already rolled this round');
-        return;
-    }
-    
-    setIsRolling(true);
-    const gameRef = database.ref(`games/${gameRoomId}`);
-    
-    try {
-        // נעיל את הזריקה
-        await gameRef.update({ isRolling: true });
-        
-        let rollCount = 0;
-        const maxRolls = 15;
-        
-        const rollInterval = setInterval(async () => {
-            rollCount++;
-            const tempDice = Array.from({length: 5}, () => Math.floor(Math.random() * 6) + 1);
-            
-            await gameRef.update({ currentDice: tempDice });
-            
-            if (rollCount >= maxRolls) {
-                clearInterval(rollInterval);
+            const startOnlineGame = async () => {
+                if (!isGameOwner || !gameRoomId || !database) {
+                    console.log('❌ Cannot start game - not owner or missing requirements');
+                    return;
+                }
                 
-                // זריקה סופית
-                setTimeout(async () => {
-                    const finalResults = Array.from({length: 5}, () => Math.floor(Math.random() * 6) + 1);
-                    const score = calculateScore(finalResults);
-                    const combination = getScoreCombination(finalResults);
+                try {
+                    const gameRef = database.ref(`games/${gameRoomId}`);
+                    const snapshot = await gameRef.once('value');
+                    const gameData = snapshot.val();
                     
-                    // עדכון נתוני השחקן
-                    const playerRef = gameRef.child(`players/${playerId}`);
-                    const playerSnapshot = await playerRef.once('value');
-                    const playerData = playerSnapshot.val();
+                    if (!gameData) {
+                        console.log('❌ No game data found');
+                        return;
+                    }
                     
-                    await playerRef.update({
-                        totalScore: (playerData.totalScore || 0) + score,
-                        lastRoll: {
-                            dice: finalResults,
-                            score: score,
-                            combination: combination,
-                            timestamp: Date.now()
-                        }
-                    });
+                    const activePlayers = Object.values(gameData.players).filter(p => !p.eliminated);
+                    
+                    if (activePlayers.length < 2) {
+                        alert('צריך לפחות 2 שחקנים כדי להתחיל');
+                        return;
+                    }
+                    
+                    console.log('🚀 Starting online game with', activePlayers.length, 'players');
                     
                     await gameRef.update({
-                        currentDice: finalResults,
-                        isRolling: false
+                        status: 'playing',
+                        currentPlayerIndex: 0,
+                        gameRound: 1,
+                        isRolling: false,
+                        startedAt: Date.now()
                     });
                     
+                    console.log('✅ Game started successfully');
+                    
+                } catch (error) {
+                    console.error('Error starting online game:', error);
+                    alert('שגיאה בהתחלת המשחק: ' + error.message);
+                }
+            };
+
+            // פונקציה מתוקנת לזריקת קוביות מקוונת
+            const rollDiceOnline = async () => {
+                if (!gameData || !database || isRolling) return;
+                
+                const currentPlayer = getCurrentPlayer();
+                if (!currentPlayer || currentPlayer.id !== playerId) {
+                    console.log('❌ Not your turn or invalid player');
+                    return;
+                }
+                
+                if (currentPlayer.lastRoll) {
+                    console.log('❌ Player already rolled this round');
+                    return;
+                }
+                
+                setIsRolling(true);
+                const gameRef = database.ref(`games/${gameRoomId}`);
+                
+                try {
+                    await gameRef.update({ isRolling: true });
+                    
+                    let rollCount = 0;
+                    const maxRolls = 15;
+                    
+                    const rollInterval = setInterval(async () => {
+                        rollCount++;
+                        const tempDice = Array.from({length: 5}, () => Math.floor(Math.random() * 6) + 1);
+                        
+                        await gameRef.update({ currentDice: tempDice });
+                        
+                        if (rollCount >= maxRolls) {
+                            clearInterval(rollInterval);
+                            
+                            setTimeout(async () => {
+                                const finalResults = Array.from({length: 5}, () => Math.floor(Math.random() * 6) + 1);
+                                const score = calculateScore(finalResults);
+                                const combination = getScoreCombination(finalResults);
+                                
+                                const playerRef = gameRef.child(`players/${playerId}`);
+                                const playerSnapshot = await playerRef.once('value');
+                                const playerData = playerSnapshot.val();
+                                
+                                await playerRef.update({
+                                    totalScore: (playerData.totalScore || 0) + score,
+                                    lastRoll: {
+                                        dice: finalResults,
+                                        score: score,
+                                        combination: combination,
+                                        timestamp: Date.now()
+                                    }
+                                });
+                                
+                                await gameRef.update({
+                                    currentDice: finalResults,
+                                    isRolling: false
+                                });
+                                
+                                setIsRolling(false);
+                                
+                                // עיכוב קטן ואז בדיקת תור
+                                setTimeout(async () => {
+                                    await checkAndAdvanceTurn();
+                                }, 1000);
+                                
+                            }, 500);
+                        }
+                    }, 120);
+                    
+                } catch (error) {
+                    console.error('Error in rollDiceOnline:', error);
                     setIsRolling(false);
-                    
-                    // כל שחקן יכול לנסות לעדכן תורות - עם עיכוב קטן כדי למנוע התנגשויות
-                    const delay = Math.random() * 1000 + 500; // עיכוב אקראי בין 0.5-1.5 שניות
-                    setTimeout(async () => {
-                        console.log('🎲 Player finished rolling, checking for turn advance...');
-                        await checkAndAdvanceTurnFixed();
-                    }, delay);
-                    
-                }, 500);
-            }
-        }, 120);
-        
-    } catch (error) {
-        console.error('Error in rollDiceOnline:', error);
-        setIsRolling(false);
-        await gameRef.update({ isRolling: false });
-    }
-};
+                    await gameRef.update({ isRolling: false });
+                }
+            };
 
-// תיקון הפונקציה לבדיקת חילופי תורות - כעת עובד עבור כל השחקנים
-const checkAndAdvanceTurnFixed = async () => {
-    if (!database || !gameRoomId) {
-        console.log('❌ Cannot advance turn - missing database or room ID');
-        return;
-    }
-    
-    try {
-        const gameRef = database.ref(`games/${gameRoomId}`);
-        const snapshot = await gameRef.once('value');
-        const currentGame = snapshot.val();
-        
-        if (!currentGame || currentGame.status !== 'playing') {
-            console.log('❌ Game not in playing state');
-            return;
-        }
-        
-        const activePlayers = Object.values(currentGame.players)
-            .filter(p => !p.eliminated)
-            .sort((a, b) => a.joinedAt - b.joinedAt); // מיון קבוע
-        
-        const playersWithRolls = activePlayers.filter(p => p.lastRoll);
-        
-        console.log('=== Checking Turn Advance ===');
-        console.log('Active players:', activePlayers.length);
-        console.log('Players with rolls:', playersWithRolls.length);
-        console.log('Current player index:', currentGame.currentPlayerIndex);
-        console.log('Am I the game owner?', isGameOwner);
-        console.log('My player ID:', playerId);
-        
-        // בדיקה שהאינדקס תקין
-        if (currentGame.currentPlayerIndex >= activePlayers.length) {
-            console.log('⚠️ Invalid player index, resetting to 0');
-            await gameRef.update({ currentPlayerIndex: 0 });
-            return;
-        }
-        
-        // בדיקה אם כל השחקנים הפעילים זרקו - הגיע הזמן לסיבוב חדש
-        if (playersWithRolls.length === activePlayers.length && activePlayers.length > 1) {
-            console.log('🔄 All players rolled - ending round');
-            await endRoundAndEliminateFixed(gameRef, currentGame, activePlayers);
-        } else if (playersWithRolls.length < activePlayers.length) {
-            // עדיין יש שחקנים שלא זרקו - מעבר לשחקן הבא
-            console.log('➡️ Moving to next player');
-            await moveToNextPlayerFixed(gameRef, currentGame, activePlayers);
-        }
-        
-    } catch (error) {
-        console.error('Error in checkAndAdvanceTurnFixed:', error);
-    }
-};
-
-// פונקציה מתוקנת למעבר לשחקן הבא - עובד עבור כל השחקנים
-const moveToNextPlayerFixed = async (gameRef, currentGame, activePlayers) => {
-    try {
-        const currentIndex = currentGame.currentPlayerIndex || 0;
-        
-        // חיפוש השחקן הבא שלא זרק עדיין
-        for (let i = 1; i <= activePlayers.length; i++) {
-            const nextIndex = (currentIndex + i) % activePlayers.length;
-            const nextPlayer = activePlayers[nextIndex];
-            
-            if (nextPlayer && !nextPlayer.lastRoll && !nextPlayer.eliminated) {
-                console.log('🎯 Moving to player:', nextPlayer.name, 'at index:', nextIndex);
-                
-                // שימוש ב-transaction כדי למנוע התנגשויות
-                await gameRef.child('currentPlayerIndex').transaction(() => {
-                    return nextIndex;
-                });
-                
-                await gameRef.update({ isRolling: false });
-                return;
-            }
-        }
-        
-        console.log('⚠️ No valid next player found');
-        
-    } catch (error) {
-        console.error('Error in moveToNextPlayerFixed:', error);
-    }
-};
-
-            const nextTurnOnline = async () => {
-                if (!isGameOwner || !database) {
-                    console.log('❌ Not game owner or no database, skipping turn advance');
+            // פונקציה מתוקנת לבדיקת חילופי תורות
+            const checkAndAdvanceTurn = async () => {
+                if (!database || !gameRoomId) {
                     return;
                 }
                 
@@ -535,86 +434,106 @@ const moveToNextPlayerFixed = async (gameRef, currentGame, activePlayers) => {
                     const snapshot = await gameRef.once('value');
                     const currentGame = snapshot.val();
                     
-                    if (!currentGame) {
-                        console.log('❌ No current game data');
+                    if (!currentGame || currentGame.status !== 'playing') {
                         return;
                     }
                     
-                    const activePlayers = Object.values(currentGame.players).filter(p => !p.eliminated);
+                    const activePlayers = Object.values(currentGame.players)
+                        .filter(p => !p.eliminated)
+                        .sort((a, b) => a.joinedAt - b.joinedAt);
                     
-                    if (activePlayers.length <= 1) {
-                        // Game over
-                        console.log('🏆 Game Finished!');
-                        await gameRef.update({
-                            status: 'finished',
-                            winner: activePlayers[0]?.id || null,
-                            finishedAt: Date.now()
-                        });
-                        return;
+                    const playersWithRolls = activePlayers.filter(p => p.lastRoll);
+                    
+                    console.log('=== Turn Check ===');
+                    console.log('Active players:', activePlayers.length);
+                    console.log('Players with rolls:', playersWithRolls.length);
+                    console.log('Current index:', currentGame.currentPlayerIndex);
+                    
+                    // אם כל השחקנים זרקו - סיום סיבוב
+                    if (playersWithRolls.length === activePlayers.length && activePlayers.length > 1) {
+                        console.log('🔄 All players rolled - ending round');
+                        await endRound(gameRef, currentGame, activePlayers);
+                    } else if (playersWithRolls.length < activePlayers.length) {
+                        // מעבר לשחקן הבא
+                        console.log('➡️ Moving to next player');
+                        await moveToNextPlayer(gameRef, currentGame, activePlayers);
                     }
                     
-                    // Round complete - eliminate lowest scorer
-                    const lowestScore = Math.min(...activePlayers.map(p => p.totalScore));
-                    const playersToEliminate = activePlayers.filter(p => p.totalScore === lowestScore);
+                } catch (error) {
+                    console.error('Error in checkAndAdvanceTurn:', error);
+                }
+            };
+
+            // פונקציה למעבר לשחקן הבא
+            const moveToNextPlayer = async (gameRef, currentGame, activePlayers) => {
+                try {
+                    const currentIndex = currentGame.currentPlayerIndex || 0;
                     
-                    console.log('=== Round Complete ===');
+                    // חיפוש השחקן הבא שלא זרק
+                    for (let i = 1; i <= activePlayers.length; i++) {
+                        const nextIndex = (currentIndex + i) % activePlayers.length;
+                        const nextPlayer = activePlayers[nextIndex];
+                        
+                        if (nextPlayer && !nextPlayer.lastRoll && !nextPlayer.eliminated) {
+                            console.log('Moving to player:', nextPlayer.name, 'at index:', nextIndex);
+                            await gameRef.update({
+                                currentPlayerIndex: nextIndex,
+                                isRolling: false
+                            });
+                            return;
+                        }
+                    }
+                    
+                } catch (error) {
+                    console.error('Error in moveToNextPlayer:', error);
+                }
+            };
+
+            // פונקציה לסיום סיבוב
+            const endRound = async (gameRef, currentGame, activePlayers) => {
+                try {
+                    const lowestScore = Math.min(...activePlayers.map(p => p.totalScore || 0));
+                    const playersToEliminate = activePlayers.filter(p => (p.totalScore || 0) === lowestScore);
+                    
                     console.log('💀 Eliminating players with score:', lowestScore);
-                    console.log('📋 Players to eliminate:', playersToEliminate.map(p => p.name));
+                    console.log('Players to eliminate:', playersToEliminate.map(p => p.name));
                     
                     const updates = {};
+                    
+                    // פסילת שחקנים
                     playersToEliminate.forEach(player => {
                         updates[`players/${player.id}/eliminated`] = true;
-                        updates[`players/${player.id}/lastRoll`] = null;
                     });
                     
-                    // Clear all lastRolls for new round
+                    // ניקוי זריקות
                     Object.keys(currentGame.players).forEach(playerId => {
                         updates[`players/${playerId}/lastRoll`] = null;
                     });
                     
-                    // Reset to first player for new round
-                    updates['gameRound'] = currentGame.gameRound + 1;
-                    updates['currentPlayerIndex'] = 0;
+                    // בדיקה אם המשחק הסתיים
+                    const remainingPlayers = activePlayers.filter(p => !playersToEliminate.includes(p));
+                    
+                    if (remainingPlayers.length <= 1) {
+                        updates['status'] = 'finished';
+                        updates['winner'] = remainingPlayers[0]?.id || null;
+                        updates['finishedAt'] = Date.now();
+                        console.log('🏆 Game finished!');
+                    } else {
+                        updates['gameRound'] = (currentGame.gameRound || 1) + 1;
+                        updates['currentPlayerIndex'] = 0;
+                    }
+                    
                     updates['currentDice'] = [];
+                    updates['isRolling'] = false;
                     
                     await gameRef.update(updates);
                     
-                    console.log('🔄 Starting New Round');
-                    
                 } catch (error) {
-                    console.error('❌ Error in nextTurnOnline:', error);
+                    console.error('Error in endRound:', error);
                 }
             };
 
-// פונקציה מתוקנת לקבלת השחקן הנוכחי
-const getCurrentPlayer = () => {
-    if (!gameData || !gameData.players) {
-        console.log('❌ No game data or players');
-        return null;
-    }
-    
-    const activePlayers = Object.values(gameData.players)
-        .filter(p => !p.eliminated)
-        .sort((a, b) => a.joinedAt - b.joinedAt); // מיון קבוע לפי סדר הצטרפות
-    
-    const currentIndex = gameData.currentPlayerIndex || 0;
-    
-    if (currentIndex < 0 || currentIndex >= activePlayers.length) {
-        console.log('⚠️ Invalid player index:', currentIndex, 'for', activePlayers.length, 'players');
-        return null;
-    }
-    
-    const currentPlayer = activePlayers[currentIndex];
-    
-    console.log('=== Current Player Debug ===');
-    console.log('Active players:', activePlayers.map(p => p.name));
-    console.log('Current index:', currentIndex);
-    console.log('Current player:', currentPlayer?.name);
-    
-    return currentPlayer;
-};
-
-            // Local Game Functions - תיקון גם למשחק מקומי
+            // Local Game Functions
             const rollDiceLocal = () => {
                 if (isRolling) return;
                 
@@ -649,7 +568,6 @@ const getCurrentPlayer = () => {
                             
                             setIsRolling(false);
                             
-                            // תיקון: עיכוב יותר קצר למעבר תור במשחק מקומי
                             setTimeout(() => {
                                 nextTurnLocal();
                             }, 2000);
@@ -658,128 +576,11 @@ const getCurrentPlayer = () => {
                 }, 120);
             };
 
-
-
-
-// פונקציה לסיום סיבוב ופסילת שחקנים
-const endRoundAndEliminateFixed = async (gameRef, currentGame, activePlayers) => {
-    try {
-        // מציאת הניקוד הנמוך ביותר
-        const lowestScore = Math.min(...activePlayers.map(p => p.totalScore || 0));
-        const playersToEliminate = activePlayers.filter(p => (p.totalScore || 0) === lowestScore);
-        
-        console.log('💀 Eliminating players with score:', lowestScore);
-        console.log('Players to eliminate:', playersToEliminate.map(p => p.name));
-        
-        const updates = {};
-        
-        // פסילת שחקנים
-        playersToEliminate.forEach(player => {
-            updates[`players/${player.id}/eliminated`] = true;
-        });
-        
-        // ניקוי כל הזריקות
-        Object.keys(currentGame.players).forEach(playerId => {
-            updates[`players/${playerId}/lastRoll`] = null;
-        });
-        
-        // התחלת סיבוב חדש
-        const remainingPlayers = activePlayers.filter(p => !playersToEliminate.includes(p));
-        
-        updates['gameRound'] = (currentGame.gameRound || 1) + 1;
-        updates['currentPlayerIndex'] = 0;
-        updates['currentDice'] = [];
-        updates['isRolling'] = false;
-        
-        await gameRef.update(updates);
-        
-        console.log('✅ Round ended, new round started');
-        
-    } catch (error) {
-        console.error('Error in endRoundAndEliminateFixed:', error);
-    }
-};
-
-
-// פונקציה מתוקנת לסיום סיבוב - עובד עבור כל השחקנים
-const endRoundAndEliminateFixed = async (gameRef, currentGame, activePlayers) => {
-    try {
-        // בדיקה נוספת למניעת ביצוע כפול
-        const checkSnapshot = await gameRef.once('value');
-        const recentData = checkSnapshot.val();
-        
-        // אם מישהו כבר התחיל לעדכן את הסיבוב
-        if (recentData.gameRound > currentGame.gameRound) {
-            console.log('🔄 Round already updated by another player');
-            return;
-        }
-        
-        // מציאת הניקוד הנמוך ביותר
-        const lowestScore = Math.min(...activePlayers.map(p => p.totalScore || 0));
-        const playersToEliminate = activePlayers.filter(p => (p.totalScore || 0) === lowestScore);
-        
-        console.log('💀 Eliminating players with score:', lowestScore);
-        console.log('Players to eliminate:', playersToEliminate.map(p => p.name));
-        
-        const updates = {};
-        
-        // פסילת שחקנים
-        playersToEliminate.forEach(player => {
-            updates[`players/${player.id}/eliminated`] = true;
-        });
-        
-        // ניקוי כל הזריקות
-        Object.keys(currentGame.players).forEach(playerId => {
-            updates[`players/${playerId}/lastRoll`] = null;
-        });
-        
-        // בדיקה אם המשחק הסתיים
-        const remainingPlayers = activePlayers.filter(p => !playersToEliminate.includes(p));
-        
-        if (remainingPlayers.length <= 1) {
-            // המשחק הסתיים
-            updates['status'] = 'finished';
-            updates['winner'] = remainingPlayers[0]?.id || null;
-            updates['finishedAt'] = Date.now();
-            console.log('🏆 Game finished! Winner:', remainingPlayers[0]?.name);
-        } else {
-            // התחלת סיבוב חדש
-            updates['gameRound'] = (currentGame.gameRound || 1) + 1;
-            updates['currentPlayerIndex'] = 0;
-        }
-        
-        updates['currentDice'] = [];
-        updates['isRolling'] = false;
-        
-        // שימוש ב-transaction לעדכון הסיבוב כדי למנוע התנגשויות
-        await gameRef.child('gameRound').transaction((currentRound) => {
-            // אם הסיבוב כבר עודכן - אל תעדכן שוב
-            if (currentRound > (currentGame.gameRound || 1)) {
-                return currentRound;
-            }
-            return (currentGame.gameRound || 1) + 1;
-        });
-        
-        // עדכון יתר הנתונים
-        delete updates['gameRound']; // כבר עודכן בtransaction
-        await gameRef.update(updates);
-        
-        console.log('✅ Round ended successfully');
-        
-    } catch (error) {
-        console.error('Error in endRoundAndEliminateFixed:', error);
-    }
-};
-
             const nextTurnLocal = () => {
                 const activePlayers = players.filter(p => !p.eliminated);
                 const playersWithRolls = activePlayers.filter(p => p.lastRoll);
                 
-                console.log('Local game - Active players:', activePlayers.length);
-                console.log('Local game - Players with rolls:', playersWithRolls.length);
-                
                 if (playersWithRolls.length === activePlayers.length && activePlayers.length > 1) {
-                    // סיבוב הסתיים - פסילת השחקן עם הניקוד הנמוך
                     const lowestScore = Math.min(...activePlayers.map(p => p.totalScore));
                     const lowestPlayers = activePlayers.filter(p => p.totalScore === lowestScore);
                     
@@ -801,7 +602,6 @@ const endRoundAndEliminateFixed = async (gameRef, currentGame, activePlayers) =>
                     setGameRound(gameRound + 1);
                     setCurrentPlayerIndex(newPlayers.findIndex(p => !p.eliminated));
                 } else {
-                    // מעבר לשחקן הבא שלא זרק
                     let nextIndex = currentPlayerIndex;
                     let attempts = 0;
                     
@@ -813,7 +613,6 @@ const endRoundAndEliminateFixed = async (gameRef, currentGame, activePlayers) =>
                              (players[nextIndex].eliminated || players[nextIndex].lastRoll));
                     
                     if (attempts < players.length) {
-                        console.log('Moving to next player in local game:', players[nextIndex]?.name);
                         setCurrentPlayerIndex(nextIndex);
                     }
                 }
@@ -1312,7 +1111,6 @@ const endRoundAndEliminateFixed = async (gameRef, currentGame, activePlayers) =>
 
                             {/* Game Table */}
                             <div className="relative w-full h-96 mx-auto max-w-6xl">
-                                {/* Oval Table - More like the image */}
                                 <div className="w-full h-full bg-gradient-to-br from-green-600 to-green-700 shadow-2xl" 
                                      style={{
                                          borderRadius: '50%/35%',
@@ -1320,11 +1118,9 @@ const endRoundAndEliminateFixed = async (gameRef, currentGame, activePlayers) =>
                                          boxShadow: 'inset 0 0 50px rgba(0,0,0,0.3), 0 20px 40px rgba(0,0,0,0.4)'
                                      }}>
                                     
-                                    {/* Table Inner Shadow */}
                                     <div className="absolute inset-4 bg-gradient-to-br from-green-500 to-green-600 opacity-90" 
                                          style={{borderRadius: '50%/35%'}}></div>
                                     
-                                    {/* Table Center Line */}
                                     <div className="absolute top-1/2 left-1/4 right-1/4 h-0.5 bg-yellow-600 opacity-50 transform -translate-y-1/2"></div>
                                     
                                     {/* Players */}
@@ -1344,14 +1140,12 @@ const endRoundAndEliminateFixed = async (gameRef, currentGame, activePlayers) =>
                                                     } ${isCurrentPlayerTurn && !isEliminated ? 'scale-110' : ''}`}
                                                     style={{ left: pos.x, top: pos.y }}
                                                 >
-                                                    {/* Player Avatar */}
                                                     <div className={`w-20 h-20 ${avatarGradients[index]} rounded-full flex items-center justify-center text-3xl mb-2 shadow-lg border-4 border-white transition-all duration-500 ${
                                                         isCurrentPlayerTurn && !isEliminated ? 'player-glow' : ''
                                                     } ${isMe ? 'ring-4 ring-blue-400' : ''}`}>
                                                         {isEliminated ? '💀' : avatarEmojis[index]}
                                                     </div>
                                                     
-                                                    {/* Player Name */}
                                                     <div className={`text-white text-sm font-bold mb-1 bg-black bg-opacity-50 rounded px-2 py-1 ${
                                                         isCurrentPlayerTurn && !isEliminated ? 'text-yellow-300' : ''
                                                     }`}>
@@ -1359,14 +1153,12 @@ const endRoundAndEliminateFixed = async (gameRef, currentGame, activePlayers) =>
                                                         {isMe && <span className="text-blue-300"> (אתה)</span>}
                                                     </div>
                                                     
-                                                    {/* Player Score */}
                                                     <div className={`text-sm font-bold mb-2 bg-black bg-opacity-60 rounded px-2 py-1 ${
                                                         isEliminated ? 'text-gray-400' : 'text-yellow-300'
                                                     }`}>
                                                         {(player.totalScore || 0).toLocaleString()} נק'
                                                     </div>
                                                     
-                                                    {/* Last Roll Info */}
                                                     {player.lastRoll && !isEliminated && (
                                                         <div className="text-xs text-gray-200 mt-1 bg-black bg-opacity-70 rounded px-2 py-1">
                                                             {player.lastRoll.combination}<br/>
@@ -1375,7 +1167,6 @@ const endRoundAndEliminateFixed = async (gameRef, currentGame, activePlayers) =>
                                                     )}
                                                 </div>
 
-                                                {/* Player Dice - Positioned better */}
                                                 {player.lastRoll && !isEliminated && (
                                                     <div
                                                         className="absolute transform -translate-x-1/2 -translate-y-1/2 z-10"
@@ -1568,4 +1359,3 @@ const endRoundAndEliminateFixed = async (gameRef, currentGame, activePlayers) =>
     </script>
 </body>
 </html>
-
