@@ -147,22 +147,34 @@ const firebaseConfig = {
                                 console.log('Active players count:', activePlayers.length);
                                 console.log('Active players:', activePlayers.map(p => p.name));
                                 
-                                // מנגנון אוטומטי למעבר תורות
+                                // מנגנון אוטומטי למעבר תורות - רק אם המשחק פעיל
                                 if (data.status === 'playing' && !data.isRolling) {
                                     const playersWithRolls = activePlayers.filter(p => p.lastRoll);
                                     
+                                    // אם כל השחקנים זרקו אבל התור לא עבר - חכה רגע ואז בדוק
                                     if (playersWithRolls.length === activePlayers.length && activePlayers.length > 1) {
                                         console.log('🚨 All players have rolled but turn didnt advance - forcing check');
                                         setTimeout(async () => {
-                                            await checkAndAdvanceTurnFixed();
-                                        }, 2000);
-                                    } else if (playersWithRolls.length < activePlayers.length) {
+                                            // בדיקה נוספת שהמשחק עדיין פעיל לפני הבדיקה
+                                            const recentSnapshot = await gameRef.once('value');
+                                            const recentData = recentSnapshot.val();
+                                            if (recentData && recentData.status === 'playing') {
+                                                await checkAndAdvanceTurnFixed();
+                                            }
+                                        }, 1000);
+                                    } 
+                                    // אם השחקן הנוכחי כבר זרק אבל התור לא עבר
+                                    else if (playersWithRolls.length < activePlayers.length) {
                                         const currentPlayer = activePlayers[data.currentPlayerIndex];
                                         if (currentPlayer && currentPlayer.lastRoll) {
                                             console.log('🚨 Current player already rolled but turn didnt advance - forcing check');
                                             setTimeout(async () => {
-                                                await checkAndAdvanceTurnFixed();
-                                            }, 2000);
+                                                const recentSnapshot = await gameRef.once('value');
+                                                const recentData = recentSnapshot.val();
+                                                if (recentData && recentData.status === 'playing') {
+                                                    await checkAndAdvanceTurnFixed();
+                                                }
+                                            }, 1000);
                                         }
                                     }
                                 }
@@ -492,12 +504,24 @@ const firebaseConfig = {
                         return;
                     }
                     
+                    // אם כל השחקנים זרקו - עובר לסיבוב חדש
                     if (playersWithRolls.length === activePlayers.length && activePlayers.length > 1) {
                         console.log('🔄 All players rolled - ending round');
                         await endRoundAndEliminate(gameRef, currentGame, activePlayers);
-                    } else if (playersWithRolls.length < activePlayers.length) {
+                    } 
+                    // אם עדיין יש שחקנים שלא זרקו - עובר לשחקן הבא
+                    else if (playersWithRolls.length < activePlayers.length) {
                         console.log('➡️ Moving to next player');
                         await moveToNextPlayer(gameRef, currentGame, activePlayers);
+                    }
+                    // אם יש רק שחקן אחד פעיל - המשחק הסתיים
+                    else if (activePlayers.length === 1) {
+                        console.log('🏆 Only one player left - game finished');
+                        await gameRef.update({
+                            status: 'finished',
+                            winner: activePlayers[0]?.id || null,
+                            finishedAt: Date.now()
+                        });
                     }
                     
                 } catch (error) {
@@ -508,7 +532,15 @@ const firebaseConfig = {
             const moveToNextPlayer = async (gameRef, currentGame, activePlayers) => {
                 try {
                     const currentIndex = currentGame.currentPlayerIndex || 0;
+                    const playersWithRolls = activePlayers.filter(p => p.lastRoll);
                     
+                    // אם כל השחקנים זרקו - לא צריך לעבור לשחקן הבא, צריך לסיים סיבוב
+                    if (playersWithRolls.length === activePlayers.length) {
+                        console.log('⚠️ All players have rolled - should end round instead');
+                        return;
+                    }
+                    
+                    // חיפוש השחקן הבא שלא זרק עדיין
                     for (let i = 1; i <= activePlayers.length; i++) {
                         const nextIndex = (currentIndex + i) % activePlayers.length;
                         const nextPlayer = activePlayers[nextIndex];
@@ -516,6 +548,7 @@ const firebaseConfig = {
                         if (nextPlayer && !nextPlayer.lastRoll && !nextPlayer.eliminated) {
                             console.log('🎯 Moving to player:', nextPlayer.name, 'at index:', nextIndex);
                             
+                            // שימוש ב-transaction כדי למנוע התנגשויות
                             await gameRef.child('currentPlayerIndex').transaction(() => {
                                 return nextIndex;
                             });
@@ -525,7 +558,9 @@ const firebaseConfig = {
                         }
                     }
                     
-                    console.log('⚠️ No valid next player found');
+                    // אם הגענו לכאן, כל השחקנים זרקו - צריך לסיים סיבוב
+                    console.log('⚠️ No player found without roll - ending round');
+                    await endRoundAndEliminate(gameRef, currentGame, activePlayers);
                     
                 } catch (error) {
                     console.error('Error in moveToNextPlayer:', error);
