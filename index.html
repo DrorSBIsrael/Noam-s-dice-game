@@ -8,6 +8,25 @@
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        // השתקת אזהרת Tailwind
+        if (window.tailwind) {
+            window.tailwind.config = {
+                corePlugins: { preflight: false }
+            };
+        }
+        
+        // הסתרת אזהרות פיתוח (אופציונלי)
+        const originalWarn = console.warn;
+        console.warn = function(...args) {
+            const message = args.join(' ');
+            if (message.includes('should not be used in production') || 
+                message.includes('Be sure to precompile')) {
+                return; // דלג על האזהרות האלה
+            }
+            originalWarn.apply(console, args);
+        };
+    </script>
     
     <!-- Firebase SDKs -->
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
@@ -151,30 +170,34 @@ const firebaseConfig = {
                                 if (data.status === 'playing' && !data.isRolling) {
                                     const playersWithRolls = activePlayers.filter(p => p.lastRoll);
                                     
-                                    // אם כל השחקנים זרקו אבל התור לא עבר - חכה רגע ואז בדוק
+                                    console.log('=== Auto Turn Check ===');
+                                    console.log('Players with rolls:', playersWithRolls.length, '/', activePlayers.length);
+                                    console.log('Current player:', activePlayers[data.currentPlayerIndex]?.name);
+                                    console.log('Current player rolled:', !!activePlayers[data.currentPlayerIndex]?.lastRoll);
+                                    
+                                    // אם כל השחקנים זרקו - סיים סיבוב
                                     if (playersWithRolls.length === activePlayers.length && activePlayers.length > 1) {
-                                        console.log('🚨 All players have rolled but turn didnt advance - forcing check');
+                                        console.log('🚨 All players have rolled - ending round');
                                         setTimeout(async () => {
-                                            // בדיקה נוספת שהמשחק עדיין פעיל לפני הבדיקה
                                             const recentSnapshot = await gameRef.once('value');
                                             const recentData = recentSnapshot.val();
                                             if (recentData && recentData.status === 'playing') {
                                                 await checkAndAdvanceTurnFixed();
                                             }
-                                        }, 1000);
+                                        }, 800);
                                     } 
-                                    // אם השחקן הנוכחי כבר זרק אבל התור לא עבר
+                                    // אם השחקן הנוכחי כבר זרק - עבור לשחקן הבא
                                     else if (playersWithRolls.length < activePlayers.length) {
                                         const currentPlayer = activePlayers[data.currentPlayerIndex];
                                         if (currentPlayer && currentPlayer.lastRoll) {
-                                            console.log('🚨 Current player already rolled but turn didnt advance - forcing check');
+                                            console.log('🚨 Current player already rolled - moving to next');
                                             setTimeout(async () => {
                                                 const recentSnapshot = await gameRef.once('value');
                                                 const recentData = recentSnapshot.val();
                                                 if (recentData && recentData.status === 'playing') {
                                                     await checkAndAdvanceTurnFixed();
                                                 }
-                                            }, 1000);
+                                            }, 800);
                                         }
                                     }
                                 }
@@ -475,11 +498,18 @@ const firebaseConfig = {
                                 
                                 console.log('✅ Roll completed successfully');
                                 
-                                // עיכוב קצר יותר למעבר תור
+                                // עיכוב קצר למעבר תור
                                 setTimeout(async () => {
                                     console.log('🎲 Player finished rolling, checking for turn advance...');
-                                    await checkAndAdvanceTurnFixed();
-                                }, 500);
+                                    
+                                    // בדיקה נוספת של מצב המשחק לפני מעבר תור
+                                    const checkSnapshot = await gameRef.once('value');
+                                    const checkData = checkSnapshot.val();
+                                    
+                                    if (checkData && checkData.status === 'playing') {
+                                        await checkAndAdvanceTurnFixed();
+                                    }
+                                }, 1000);
                                 
                             }, 500);
                         }
@@ -684,7 +714,7 @@ const firebaseConfig = {
                 
                 if (currentIndex < 0 || currentIndex >= activePlayers.length) {
                     console.log('⚠️ Invalid player index:', currentIndex, 'for', activePlayers.length, 'players');
-                    return null;
+                    return activePlayers[0] || null; // חזור לשחקן הראשון במקרה של שגיאה
                 }
                 
                 const currentPlayer = activePlayers[currentIndex];
@@ -693,6 +723,7 @@ const firebaseConfig = {
                 console.log('Active players:', activePlayers.map(p => p.name));
                 console.log('Current index:', currentIndex);
                 console.log('Current player:', currentPlayer?.name);
+                console.log('Player already rolled:', !!currentPlayer?.lastRoll);
                 
                 return currentPlayer;
             };
@@ -880,7 +911,7 @@ const firebaseConfig = {
                 return (
                     <div className="min-h-screen bg-gradient-to-br from-green-800 to-green-900 flex items-center justify-center p-4">
                         <div className="bg-white rounded-xl p-6 max-w-2xl max-h-96 overflow-y-auto">
-                            <h3 className="text-2xl font-bold mb-4">🎲 הוראות המשחק</h3>
+                            <h3 className="text-2xl font-bold mb-4">🎲 14062025-הוראות המשחק</h3>
                             <div className="space-y-3 text-right">
                                 <div>
                                     <h4 className="font-bold text-lg">סוגי משחק:</h4>
