@@ -397,7 +397,10 @@ const firebaseConfig = {
             };
 
             const rollDiceOnline = async () => {
-                if (!gameData || !database || isRolling) return;
+                if (!gameData || !database || isRolling) {
+                    console.log('❌ Cannot roll - missing data, database, or already rolling');
+                    return;
+                }
                 
                 const currentPlayer = getCurrentPlayer();
                 if (!currentPlayer || currentPlayer.id !== playerId) {
@@ -405,15 +408,19 @@ const firebaseConfig = {
                     return;
                 }
                 
+                // בדיקה חזקה יותר - אם השחקן כבר זרק בסיבוב הנוכחי
                 if (currentPlayer.lastRoll) {
                     console.log('❌ Player already rolled this round');
+                    alert('כבר זרקת בסיבוב הזה! חכה לתור הבא.');
                     return;
                 }
                 
+                console.log('✅ Starting dice roll for player:', currentPlayer.name);
                 setIsRolling(true);
                 const gameRef = database.ref(`games/${gameRoomId}`);
                 
                 try {
+                    // נעיל את הזריקה ב-Firebase
                     await gameRef.update({ isRolling: true });
                     
                     let rollCount = 0;
@@ -433,18 +440,30 @@ const firebaseConfig = {
                                 const score = calculateScore(finalResults);
                                 const combination = getScoreCombination(finalResults);
                                 
-                                const playerRef = gameRef.child(`players/${playerId}`);
-                                const playerSnapshot = await playerRef.once('value');
-                                const playerData = playerSnapshot.val();
+                                console.log('🎲 Final dice results:', finalResults, 'Score:', score);
                                 
-                                await playerRef.update({
-                                    totalScore: (playerData.totalScore || 0) + score,
-                                    lastRoll: {
-                                        dice: finalResults,
-                                        score: score,
-                                        combination: combination,
-                                        timestamp: Date.now()
+                                // עדכון נתוני השחקן ב-transaction כדי למנוע עדכונים כפולים
+                                const playerRef = gameRef.child(`players/${playerId}`);
+                                
+                                await playerRef.transaction((currentData) => {
+                                    if (!currentData) return currentData;
+                                    
+                                    // אם השחקן כבר זרק - אל תעדכן שוב
+                                    if (currentData.lastRoll) {
+                                        console.log('⚠️ Player already has a roll - skipping update');
+                                        return currentData;
                                     }
+                                    
+                                    return {
+                                        ...currentData,
+                                        totalScore: (currentData.totalScore || 0) + score,
+                                        lastRoll: {
+                                            dice: finalResults,
+                                            score: score,
+                                            combination: combination,
+                                            timestamp: Date.now()
+                                        }
+                                    };
                                 });
                                 
                                 await gameRef.update({
@@ -454,11 +473,13 @@ const firebaseConfig = {
                                 
                                 setIsRolling(false);
                                 
-                                const delay = Math.random() * 1000 + 500;
+                                console.log('✅ Roll completed successfully');
+                                
+                                // עיכוב קצר יותר למעבר תור
                                 setTimeout(async () => {
                                     console.log('🎲 Player finished rolling, checking for turn advance...');
                                     await checkAndAdvanceTurnFixed();
-                                }, delay);
+                                }, 500);
                                 
                             }, 500);
                         }
@@ -1514,10 +1535,11 @@ const firebaseConfig = {
                                             </div>
                                         )}
                                         
-                                        {!gameIsRolling && ((gameMode === 'online' && isMyTurn) || (gameMode === 'local')) && !currentPlayer?.lastRoll ? (
+                                        {!gameIsRolling && ((gameMode === 'online' && isMyTurn) || (gameMode === 'local')) && !currentPlayer?.lastRoll && currentPlayer ? (
                                             <button
                                                 onClick={rollDice}
-                                                className="bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white font-bold py-6 px-12 rounded-xl shadow-lg transition-all duration-300 transform hover:scale-105"
+                                                disabled={gameIsRolling || (gameMode === 'online' && currentPlayer?.lastRoll)}
+                                                className="bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 disabled:from-gray-400 disabled:to-gray-500 disabled:cursor-not-allowed text-white font-bold py-6 px-12 rounded-xl shadow-lg transition-all duration-300 transform hover:scale-105 disabled:hover:scale-100"
                                             >
                                                 <div className="flex items-center gap-3">
                                                     <span className="text-4xl animate-bounce">🎲</span>
