@@ -91,7 +91,9 @@ const firebaseConfig = {
             const [soundEnabled, setSoundEnabled] = useState(true);
             const [gameSettings, setGameSettings] = useState({ playerCount: 2, gameType: 1 });
             const [isFirstPlayer, setIsFirstPlayer] = useState(true);
+            // State נוסף למניעת הבהובים
             const [showRules, setShowRules] = useState(false);
+            const [isTransitioning, setIsTransitioning] = useState(false);
 
             const avatarEmojis = ['🧑‍💼', '👩‍🦰', '🧑‍🎨', '👨‍🏫', '👩‍⚕️', '🧑‍🚀', '👩‍🎤', '👨‍🍳', '👩‍🔬'];
             const avatarGradients = [
@@ -191,12 +193,21 @@ const firebaseConfig = {
                                         const currentPlayer = activePlayers[data.currentPlayerIndex];
                                         if (currentPlayer && currentPlayer.lastRoll) {
                                             console.log('🚨 Current player already rolled - moving to next');
+                                            
+                                            // סימון מעבר תור
+                                            setIsTransitioning(true);
+                                            
                                             setTimeout(async () => {
                                                 const recentSnapshot = await gameRef.once('value');
                                                 const recentData = recentSnapshot.val();
                                                 if (recentData && recentData.status === 'playing') {
                                                     await checkAndAdvanceTurnFixed();
                                                 }
+                                                
+                                                // איפוס המעבר
+                                                setTimeout(() => {
+                                                    setIsTransitioning(false);
+                                                }, 500);
                                             }, 800);
                                         }
                                     }
@@ -498,6 +509,9 @@ const firebaseConfig = {
                                 
                                 console.log('✅ Roll completed successfully');
                                 
+                                // סימון שמתחיל מעבר תור
+                                setIsTransitioning(true);
+                                
                                 // עיכוב קצר למעבר תור
                                 setTimeout(async () => {
                                     console.log('🎲 Player finished rolling, checking for turn advance...');
@@ -509,6 +523,11 @@ const firebaseConfig = {
                                     if (checkData && checkData.status === 'playing') {
                                         await checkAndAdvanceTurnFixed();
                                     }
+                                    
+                                    // איפוס המעבר אחרי עיכוב נוסף
+                                    setTimeout(() => {
+                                        setIsTransitioning(false);
+                                    }, 500);
                                 }, 1000);
                                 
                             }, 500);
@@ -895,6 +914,7 @@ const firebaseConfig = {
                 setIsFirstPlayer(true);
                 setGameSettings({ playerCount: 2, gameType: 1 });
                 setPlayerName('');
+                setIsTransitioning(false);
             };
 
             // Auto-transition to game when online game starts
@@ -911,7 +931,7 @@ const firebaseConfig = {
                 return (
                     <div className="min-h-screen bg-gradient-to-br from-green-800 to-green-900 flex items-center justify-center p-4">
                         <div className="bg-white rounded-xl p-6 max-w-2xl max-h-96 overflow-y-auto">
-                            <h3 className="text-2xl font-bold mb-4">🎲 14062025-הוראות המשחק</h3>
+                            <h3 className="text-2xl font-bold mb-4">🎲 012025-הוראות המשחק</h3>
                             <div className="space-y-3 text-right">
                                 <div>
                                     <h4 className="font-bold text-lg">סוגי משחק:</h4>
@@ -1423,7 +1443,7 @@ const firebaseConfig = {
                 const currentRound = gameMode === 'online' ? gameData?.gameRound || 1 : gameRound;
                 const currentDice = gameMode === 'online' ? gameData?.currentDice || [] : diceResults;
                 const currentPlayer = gameMode === 'online' ? getCurrentPlayer() : currentPlayers[currentIndex];
-                const isMyTurn = gameMode === 'online' ? currentPlayer?.id === playerId : true;
+                const isMyTurn = gameMode === 'online' ? (currentPlayer?.id === playerId && !isTransitioning) : true;
                 const gameIsRolling = gameMode === 'online' ? gameData?.isRolling || false : isRolling;
 
                 return (
