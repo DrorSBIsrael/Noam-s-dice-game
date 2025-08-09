@@ -1,468 +1,354 @@
 <!DOCTYPE html>
 <html>
 <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>מפת אורלנדו - עם ניווט לוויז וגוגל מאפס</title>
     
-    <meta http-equiv="content-type" content="text/html; charset=UTF-8" />
-    
-        <script>
-            L_NO_TOUCH = false;
-            L_DISABLE_3D = false;
-        </script>
-    
-    <style>html, body {width: 100%;height: 100%;margin: 0;padding: 0;}</style>
-    <style>#map {position:absolute;top:0;bottom:0;right:0;left:0;}</style>
     <script src="https://cdn.jsdelivr.net/npm/leaflet@1.6.0/dist/leaflet.js"></script>
     <script src="https://code.jquery.com/jquery-1.12.4.min.js"></script>
     <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.2.0/js/bootstrap.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Leaflet.awesome-markers/2.0.2/leaflet.awesome-markers.js"></script>
+    
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.6.0/dist/leaflet.css"/>
     <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.2.0/css/bootstrap.min.css"/>
-    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.2.0/css/bootstrap-theme.min.css"/>
     <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/font-awesome/4.6.3/css/font-awesome.min.css"/>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/Leaflet.awesome-markers/2.0.2/leaflet.awesome-markers.css"/>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/python-visualization/folium/folium/templates/leaflet.awesome.rotate.min.css"/>
     
-            <meta name="viewport" content="width=device-width,
-                initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-            <style>
-                #map_5a5403947d0c4cacb7d80c8b273e6aea {
-                    position: relative;
-                    width: 100.0%;
-                    height: 100.0%;
-                    left: 0.0%;
-                    top: 0.0%;
-                }
-            </style>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            font-family: Arial, sans-serif;
+            direction: rtl;
+        }
         
+        #map {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            right: 0;
+            left: 0;
+        }
+        
+        .popup-content {
+            direction: rtl;
+            text-align: right;
+            min-width: 250px;
+        }
+        
+        .location-title {
+            font-size: 16px;
+            font-weight: bold;
+            margin-bottom: 8px;
+            color: #2c3e50;
+        }
+        
+        .location-description {
+            font-size: 13px;
+            margin-bottom: 10px;
+            color: #555;
+            line-height: 1.4;
+        }
+        
+        .navigation-buttons {
+            display: flex;
+            gap: 8px;
+            margin-top: 10px;
+        }
+        
+        .nav-btn {
+            padding: 6px 12px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            text-decoration: none;
+            display: inline-block;
+            color: white;
+            text-align: center;
+            min-width: 60px;
+        }
+        
+        .waze-btn {
+            background-color: #33CCFF;
+        }
+        
+        .waze-btn:hover {
+            background-color: #1bb3e6;
+            color: white;
+        }
+        
+        .google-btn {
+            background-color: #4285f4;
+        }
+        
+        .google-btn:hover {
+            background-color: #3367d6;
+            color: white;
+        }
+        
+        .park-legend {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: white;
+            padding: 10px;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+            z-index: 1000;
+            font-size: 12px;
+            max-width: 200px;
+        }
+        
+        .legend-item {
+            margin: 5px 0;
+        }
+        
+        .legend-color {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-left: 5px;
+            vertical-align: middle;
+        }
+    </style>
 </head>
 <body>
+    <div id="map"></div>
     
-    
-            <div class="folium-map" id="map_5a5403947d0c4cacb7d80c8b273e6aea" ></div>
-        
-</body>
-<script>
-    
-    
-            var map_5a5403947d0c4cacb7d80c8b273e6aea = L.map(
-                "map_5a5403947d0c4cacb7d80c8b273e6aea",
-                {
-                    center: [28.3852, -81.5639],
-                    crs: L.CRS.EPSG3857,
-                    zoom: 12,
-                    zoomControl: true,
-                    preferCanvas: false,
-                }
-            );
+    <div class="park-legend">
+        <h4 style="margin-top: 0;">מקרא:</h4>
+        <div class="legend-item">
+            <span class="legend-color" style="background-color: #0073e6;"></span>
+            Magic Kingdom
+        </div>
+        <div class="legend-item">
+            <span class="legend-color" style="background-color: #72b01d;"></span>
+            EPCOT
+        </div>
+        <div class="legend-item">
+            <span class="legend-color" style="background-color: #f39800;"></span>
+            Hollywood Studios
+        </div>
+        <div class="legend-item">
+            <span class="legend-color" style="background-color: #d63031;"></span>
+            Animal Kingdom
+        </div>
+        <div class="legend-item">
+            <span class="legend-color" style="background-color: #a855f7;"></span>
+            מלונות דיסני
+        </div>
+        <div class="legend-item">
+            <span class="legend-color" style="background-color: #fd79a8;"></span>
+            קניות ובילויים
+        </div>
+        <div class="legend-item">
+            <span class="legend-color" style="background-color: #00b894;"></span>
+            אאוטלטים
+        </div>
+        <div class="legend-item">
+            <span class="legend-color" style="background-color: #6c5ce7;"></span>
+            פעילויות נוספות
+        </div>
+    </div>
 
+    <script>
+        // יצירת המפה
+        var map = L.map('map', {
+            center: [28.3852, -81.5639],
+            zoom: 12,
+            zoomControl: true
+        });
+
+        // הוספת שכבת המפה
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: 'Map data © OpenStreetMap contributors',
+            maxZoom: 18
+        }).addTo(map);
+
+        // פונקציה ליצירת תוכן popup
+        function createPopupContent(title, description, lat, lng, tips = '') {
+            var content = `
+                <div class="popup-content">
+                    <div class="location-title">${title}</div>
+                    <div class="location-description">${description}</div>
+                    ${tips ? `<div style="font-size: 12px; color: #e17055; margin-bottom: 8px;"><strong>טיפ:</strong> ${tips}</div>` : ''}
+                    <div class="navigation-buttons">
+                        <a href="https://waze.com/ul?ll=${lat},${lng}&navigate=yes" 
+                           target="_blank" class="nav-btn waze-btn">וויז</a>
+                        <a href="https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}" 
+                           target="_blank" class="nav-btn google-btn">גוגל מאפס</a>
+                    </div>
+                </div>
+            `;
+            return content;
+        }
+
+        // נתוני המקומות עם תיאורים
+        var locations = [
+            // Magic Kingdom
+            {
+                coords: [28.4194, -81.5812],
+                title: "Seven Dwarfs Mine Train",
+                description: "רכבת הרים משפחתית פופולרית ביותר בעולם של שלגיה ושבעת הגמדים",
+                color: "blue",
+                tips: "הגיעו מוקדם! זוהי האטרקציה הפופולרית ביותר בפארק"
+            },
+            {
+                coords: [28.419, -81.583],
+                title: "Pirates of the Caribbean",
+                description: "שיט קלאסי בעולם הפיראטים עם אפקטים מדהימים",
+                color: "blue",
+                tips: "אטרקציה קלאסית מהנה לכל המשפחה"
+            },
+            {
+                coords: [28.4206, -81.5818],
+                title: "Be Our Guest Restaurant",
+                description: "מסעדה יוקרתית בטירת החיה והיפה - הזמנה מראש חובה",
+                color: "blue",
+                tips: "צריך הזמנה 60 יום מראש! ארוחת ערב יקרה אבל מיוחדת"
+            },
+
+            // EPCOT
+            {
+                coords: [28.3747, -81.5494],
+                title: "Soarin' Around the World",
+                description: "סימולטור טיסה מדהים מעל נופים יפים בעולם",
+                color: "green",
+                tips: "אל תאכלו לפני! ויש ריח מיוחד בכל יעד"
+            },
+            {
+                coords: [28.3712, -81.5476],
+                title: "Frozen Ever After",
+                description: "נסיעה קסומה בעולם פרוזן עם אלזה ואנה",
+                color: "green",
+                tips: "פופולרי מאוד! השתמשו ב-Genie+ או בואו מוקדם"
+            },
+            {
+                coords: [28.3756, -81.5489],
+                title: "Coral Reef Restaurant",
+                description: "מסעדה ייחודית עם נוף לאקווריום ענק",
+                color: "green",
+                tips: "הנוף מדהים! בקשו שולחן ליד החלון"
+            },
+
+            // Hollywood Studios
+            {
+                coords: [28.3556, -81.5667],
+                title: "Slinky Dog Dash",
+                description: "רכבת הרים משפחתית בעולם צעצוע של סיפור",
+                color: "orange",
+                tips: "אחת האטרקציות החדשות והפופולריות!"
+            },
+            {
+                coords: [28.3567, -81.5594],
+                title: "Indiana Jones Stunt Show",
+                description: "מופע פעלולים מרהיב בסגנון אינדיאנה ג'ונס",
+                color: "orange",
+                tips: "מופע מדהים! בדקו זמני הצגה"
+            },
+            {
+                coords: [28.3563, -81.5602],
+                title: "Sci-Fi Dine-In Theater",
+                description: "מסעדה ייחודית בסגנון קולנוע דרייב-אין משנות ה-50",
+                color: "orange",
+                tips: "חוויה ייחודית! אוכל בינוני אבל האווירה מיוחדת"
+            },
+
+            // Animal Kingdom
+            {
+                coords: [28.3586, -81.5901],
+                title: "Kilimanjaro Safaris",
+                description: "ספארי אמיתי עם חיות פראיות באפריקה המדומה",
+                color: "red",
+                tips: "הטוב ביותר בבוקר או לקראת שקיעה כשהחיות פעילות"
+            },
+            {
+                coords: [28.355, -81.5908],
+                title: "Avatar Flight of Passage",
+                description: "סימולטור טיסה מהפכני בעולם פנדורה",
+                color: "red",
+                tips: "האטרקציה הטובה ביותר בדיסני! חובה לחוות"
+            },
+            {
+                coords: [28.3547, -81.5902],
+                title: "Satu'li Canteen",
+                description: "מסעדה בעולם פנדורה עם אוכל אקזוטי ומיוחד",
+                color: "red",
+                tips: "אוכל מעניין ושונה! נסו את ה-Bowl"
+            },
+
+            // מלונות ובילויים
+            {
+                coords: [28.3366, -81.5405],
+                title: "Disney's Pop Century Resort",
+                description: "מלון דיסני בנושא העשורים עם בריכות מהנות",
+                color: "purple",
+                tips: "מלון במחיר סביר של דיסני עם תחבורה חינם לפארקים"
+            },
+            {
+                coords: [28.37, -81.519],
+                title: "Disney Springs",
+                description: "אזור קניות, מסעדות ובילויים חינמי של דיסני",
+                color: "pink",
+                tips: "כניסה חינם! הרבה מסעדות וחנויות, חניה חינם"
+            },
+
+            // קניות ופעילויות
+            {
+                coords: [28.4294, -81.452],
+                title: "Orlando International Premium Outlets",
+                description: "אאוטלט גדול עם מותגים מובילים במחירים מצוינים",
+                color: "darkgreen",
+                tips: "הנחות מעולות! הביאו נעליים נוחות - המקום ענק"
+            },
+            {
+                coords: [28.4328, -81.4684],
+                title: "Andretti Indoor Karting & Games",
+                description: "מתחם משחקים ומרוצי קארטינג מקורה מתקדם",
+                color: "darkred",
+                tips: "פעילות מהנה לכל המשפחה! אפשר לשלב עם האאוטלט"
+            }
+        ];
+
+        // הוספת המרקרים למפה
+        locations.forEach(function(location) {
+            var marker = L.marker(location.coords).addTo(map);
             
+            var icon = L.AwesomeMarkers.icon({
+                icon: 'info-sign',
+                iconColor: 'white',
+                markerColor: location.color,
+                prefix: 'glyphicon'
+            });
+            marker.setIcon(icon);
 
-        
-    
-            var tile_layer_45750f6c272016793599009c01474719 = L.tileLayer(
-                "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
-                {"attribution": "Data by \u0026copy; \u003ca href=\"http://openstreetmap.org\"\u003eOpenStreetMap\u003c/a\u003e, under \u003ca href=\"http://www.openstreetmap.org/copyright\"\u003eODbL\u003c/a\u003e.", "detectRetina": false, "maxNativeZoom": 18, "maxZoom": 18, "minZoom": 0, "noWrap": false, "opacity": 1, "subdomains": "abc", "tms": false}
-            ).addTo(map_5a5403947d0c4cacb7d80c8b273e6aea);
-        
-    
-            var marker_54006f84f1febaabd8787a9e533b732a = L.marker(
-                [28.4194, -81.5812],
-                {}
-            ).addTo(map_5a5403947d0c4cacb7d80c8b273e6aea);
-        
-    
-            var icon_1962c5866ad8d7f565b580d78984b12a = L.AwesomeMarkers.icon(
-                {"extraClasses": "fa-rotate-0", "icon": "info-sign", "iconColor": "white", "markerColor": "blue", "prefix": "glyphicon"}
+            var popupContent = createPopupContent(
+                location.title, 
+                location.description, 
+                location.coords[0], 
+                location.coords[1],
+                location.tips
             );
-            marker_54006f84f1febaabd8787a9e533b732a.setIcon(icon_1962c5866ad8d7f565b580d78984b12a);
-        
-    
-        var popup_04a0d34902513b2d826b0c1aa807bb11 = L.popup({"maxWidth": "100%"});
+            
+            marker.bindPopup(popupContent, {
+                maxWidth: 300,
+                className: 'custom-popup'
+            });
+        });
 
-        
-            var html_11d0c90a643d45be8f6c20e5c70a2e88 = $(`<div id="html_11d0c90a643d45be8f6c20e5c70a2e88" style="width: 100.0%; height: 100.0%;">Magic Kingdom - Seven Dwarfs Mine Train</div>`)[0];
-            popup_04a0d34902513b2d826b0c1aa807bb11.setContent(html_11d0c90a643d45be8f6c20e5c70a2e88);
-        
+        // הוספת פונקציונליות נוספת
+        map.on('popupopen', function() {
+            // התמקדות במרקר שנפתח
+            setTimeout(function() {
+                map.panTo(map.getPopup().getLatLng());
+            }, 100);
+        });
 
-        marker_54006f84f1febaabd8787a9e533b732a.bindPopup(popup_04a0d34902513b2d826b0c1aa807bb11)
-        ;
-
-        
-    
-    
-            var marker_2ee27ee42890f526dc8b56c1cc502390 = L.marker(
-                [28.419, -81.583],
-                {}
-            ).addTo(map_5a5403947d0c4cacb7d80c8b273e6aea);
-        
-    
-            var icon_92a3e24f97adafce508c49f70aaadc11 = L.AwesomeMarkers.icon(
-                {"extraClasses": "fa-rotate-0", "icon": "info-sign", "iconColor": "white", "markerColor": "blue", "prefix": "glyphicon"}
-            );
-            marker_2ee27ee42890f526dc8b56c1cc502390.setIcon(icon_92a3e24f97adafce508c49f70aaadc11);
-        
-    
-        var popup_a66eca6631dc4e8c9dedf2743bde7a7b = L.popup({"maxWidth": "100%"});
-
-        
-            var html_5c2b804256a088ea816a34e916d3eaf7 = $(`<div id="html_5c2b804256a088ea816a34e916d3eaf7" style="width: 100.0%; height: 100.0%;">Magic Kingdom - Pirates of the Caribbean</div>`)[0];
-            popup_a66eca6631dc4e8c9dedf2743bde7a7b.setContent(html_5c2b804256a088ea816a34e916d3eaf7);
-        
-
-        marker_2ee27ee42890f526dc8b56c1cc502390.bindPopup(popup_a66eca6631dc4e8c9dedf2743bde7a7b)
-        ;
-
-        
-    
-    
-            var marker_3eb9afdd6da8c5c4859d61ebfa68b9c3 = L.marker(
-                [28.4206, -81.5818],
-                {}
-            ).addTo(map_5a5403947d0c4cacb7d80c8b273e6aea);
-        
-    
-            var icon_6f4020e9d29e0f46a55f8e8aca97ae4b = L.AwesomeMarkers.icon(
-                {"extraClasses": "fa-rotate-0", "icon": "info-sign", "iconColor": "white", "markerColor": "blue", "prefix": "glyphicon"}
-            );
-            marker_3eb9afdd6da8c5c4859d61ebfa68b9c3.setIcon(icon_6f4020e9d29e0f46a55f8e8aca97ae4b);
-        
-    
-        var popup_afda76209a8c344640421ef60db1f75d = L.popup({"maxWidth": "100%"});
-
-        
-            var html_40fa690e1c0cc0f2d0359a3e9d0a5cf8 = $(`<div id="html_40fa690e1c0cc0f2d0359a3e9d0a5cf8" style="width: 100.0%; height: 100.0%;">Magic Kingdom - Be Our Guest Restaurant</div>`)[0];
-            popup_afda76209a8c344640421ef60db1f75d.setContent(html_40fa690e1c0cc0f2d0359a3e9d0a5cf8);
-        
-
-        marker_3eb9afdd6da8c5c4859d61ebfa68b9c3.bindPopup(popup_afda76209a8c344640421ef60db1f75d)
-        ;
-
-        
-    
-    
-            var marker_d63ba4935de795e3c74c4adb99ea3b74 = L.marker(
-                [28.3747, -81.5494],
-                {}
-            ).addTo(map_5a5403947d0c4cacb7d80c8b273e6aea);
-        
-    
-            var icon_0dd386f3441155cfb755f82a174890fb = L.AwesomeMarkers.icon(
-                {"extraClasses": "fa-rotate-0", "icon": "info-sign", "iconColor": "white", "markerColor": "green", "prefix": "glyphicon"}
-            );
-            marker_d63ba4935de795e3c74c4adb99ea3b74.setIcon(icon_0dd386f3441155cfb755f82a174890fb);
-        
-    
-        var popup_68b5602e07c32ac17ae5dc07d58c60a2 = L.popup({"maxWidth": "100%"});
-
-        
-            var html_f45d998b4f909a8385c33457cd8db552 = $(`<div id="html_f45d998b4f909a8385c33457cd8db552" style="width: 100.0%; height: 100.0%;">EPCOT - Soarin’ Around the World</div>`)[0];
-            popup_68b5602e07c32ac17ae5dc07d58c60a2.setContent(html_f45d998b4f909a8385c33457cd8db552);
-        
-
-        marker_d63ba4935de795e3c74c4adb99ea3b74.bindPopup(popup_68b5602e07c32ac17ae5dc07d58c60a2)
-        ;
-
-        
-    
-    
-            var marker_32f83938c2e9cd8a2a37db843dfb6a84 = L.marker(
-                [28.3712, -81.5476],
-                {}
-            ).addTo(map_5a5403947d0c4cacb7d80c8b273e6aea);
-        
-    
-            var icon_2d663c76cd9dac1ebd16e4556de50838 = L.AwesomeMarkers.icon(
-                {"extraClasses": "fa-rotate-0", "icon": "info-sign", "iconColor": "white", "markerColor": "green", "prefix": "glyphicon"}
-            );
-            marker_32f83938c2e9cd8a2a37db843dfb6a84.setIcon(icon_2d663c76cd9dac1ebd16e4556de50838);
-        
-    
-        var popup_a359454a138dc78d01d75d0150e3a099 = L.popup({"maxWidth": "100%"});
-
-        
-            var html_27ad6e29e1ac0a04bb66623d9ac1ab1f = $(`<div id="html_27ad6e29e1ac0a04bb66623d9ac1ab1f" style="width: 100.0%; height: 100.0%;">EPCOT - Frozen Ever After</div>`)[0];
-            popup_a359454a138dc78d01d75d0150e3a099.setContent(html_27ad6e29e1ac0a04bb66623d9ac1ab1f);
-        
-
-        marker_32f83938c2e9cd8a2a37db843dfb6a84.bindPopup(popup_a359454a138dc78d01d75d0150e3a099)
-        ;
-
-        
-    
-    
-            var marker_ea48fd5c4c3d39f33f0d7cfd7bd45ee4 = L.marker(
-                [28.3756, -81.5489],
-                {}
-            ).addTo(map_5a5403947d0c4cacb7d80c8b273e6aea);
-        
-    
-            var icon_38021e6e1c3568d74ed43b811d457944 = L.AwesomeMarkers.icon(
-                {"extraClasses": "fa-rotate-0", "icon": "info-sign", "iconColor": "white", "markerColor": "green", "prefix": "glyphicon"}
-            );
-            marker_ea48fd5c4c3d39f33f0d7cfd7bd45ee4.setIcon(icon_38021e6e1c3568d74ed43b811d457944);
-        
-    
-        var popup_4c445bc42203c9310070e54be63d7c3a = L.popup({"maxWidth": "100%"});
-
-        
-            var html_4f8cd1b691b2840d907514ba522f07ee = $(`<div id="html_4f8cd1b691b2840d907514ba522f07ee" style="width: 100.0%; height: 100.0%;">EPCOT - Coral Reef Restaurant</div>`)[0];
-            popup_4c445bc42203c9310070e54be63d7c3a.setContent(html_4f8cd1b691b2840d907514ba522f07ee);
-        
-
-        marker_ea48fd5c4c3d39f33f0d7cfd7bd45ee4.bindPopup(popup_4c445bc42203c9310070e54be63d7c3a)
-        ;
-
-        
-    
-    
-            var marker_3af35872beebf94562b321195c2ed5c2 = L.marker(
-                [28.3556, -81.5667],
-                {}
-            ).addTo(map_5a5403947d0c4cacb7d80c8b273e6aea);
-        
-    
-            var icon_74b6e787846d41fb6435c558cf79c943 = L.AwesomeMarkers.icon(
-                {"extraClasses": "fa-rotate-0", "icon": "info-sign", "iconColor": "white", "markerColor": "orange", "prefix": "glyphicon"}
-            );
-            marker_3af35872beebf94562b321195c2ed5c2.setIcon(icon_74b6e787846d41fb6435c558cf79c943);
-        
-    
-        var popup_a9bd2bb20e986feaed33b3ca61011cf7 = L.popup({"maxWidth": "100%"});
-
-        
-            var html_00da859856829436a29d1ae1d6e63972 = $(`<div id="html_00da859856829436a29d1ae1d6e63972" style="width: 100.0%; height: 100.0%;">Hollywood Studios - Slinky Dog Dash</div>`)[0];
-            popup_a9bd2bb20e986feaed33b3ca61011cf7.setContent(html_00da859856829436a29d1ae1d6e63972);
-        
-
-        marker_3af35872beebf94562b321195c2ed5c2.bindPopup(popup_a9bd2bb20e986feaed33b3ca61011cf7)
-        ;
-
-        
-    
-    
-            var marker_6168a6edf7c0160d32361d5373971a09 = L.marker(
-                [28.3567, -81.5594],
-                {}
-            ).addTo(map_5a5403947d0c4cacb7d80c8b273e6aea);
-        
-    
-            var icon_5ae97f2e7c399a0b1fca9d06497216b1 = L.AwesomeMarkers.icon(
-                {"extraClasses": "fa-rotate-0", "icon": "info-sign", "iconColor": "white", "markerColor": "orange", "prefix": "glyphicon"}
-            );
-            marker_6168a6edf7c0160d32361d5373971a09.setIcon(icon_5ae97f2e7c399a0b1fca9d06497216b1);
-        
-    
-        var popup_fc8fe56dd6e2bb80d7d436a5428f4ccb = L.popup({"maxWidth": "100%"});
-
-        
-            var html_68eb0746c11c12676968eb1c20d48762 = $(`<div id="html_68eb0746c11c12676968eb1c20d48762" style="width: 100.0%; height: 100.0%;">Hollywood Studios - Indiana Jones Stunt Show</div>`)[0];
-            popup_fc8fe56dd6e2bb80d7d436a5428f4ccb.setContent(html_68eb0746c11c12676968eb1c20d48762);
-        
-
-        marker_6168a6edf7c0160d32361d5373971a09.bindPopup(popup_fc8fe56dd6e2bb80d7d436a5428f4ccb)
-        ;
-
-        
-    
-    
-            var marker_3356919f3f3938351c93827a350be4a3 = L.marker(
-                [28.3563, -81.5602],
-                {}
-            ).addTo(map_5a5403947d0c4cacb7d80c8b273e6aea);
-        
-    
-            var icon_3cbe9a4ba129283b9a59d7f5a1adf313 = L.AwesomeMarkers.icon(
-                {"extraClasses": "fa-rotate-0", "icon": "info-sign", "iconColor": "white", "markerColor": "orange", "prefix": "glyphicon"}
-            );
-            marker_3356919f3f3938351c93827a350be4a3.setIcon(icon_3cbe9a4ba129283b9a59d7f5a1adf313);
-        
-    
-        var popup_e1d3c67dd9252e4fdeec0cff6d737d84 = L.popup({"maxWidth": "100%"});
-
-        
-            var html_6160f7fa6eb96beed1aef401d124cd93 = $(`<div id="html_6160f7fa6eb96beed1aef401d124cd93" style="width: 100.0%; height: 100.0%;">Hollywood Studios - Sci-Fi Dine-In Theater</div>`)[0];
-            popup_e1d3c67dd9252e4fdeec0cff6d737d84.setContent(html_6160f7fa6eb96beed1aef401d124cd93);
-        
-
-        marker_3356919f3f3938351c93827a350be4a3.bindPopup(popup_e1d3c67dd9252e4fdeec0cff6d737d84)
-        ;
-
-        
-    
-    
-            var marker_07005887e2e8c748740ac8c4a58684f8 = L.marker(
-                [28.3586, -81.5901],
-                {}
-            ).addTo(map_5a5403947d0c4cacb7d80c8b273e6aea);
-        
-    
-            var icon_d568198d819816a16514a5f2185a50b6 = L.AwesomeMarkers.icon(
-                {"extraClasses": "fa-rotate-0", "icon": "info-sign", "iconColor": "white", "markerColor": "red", "prefix": "glyphicon"}
-            );
-            marker_07005887e2e8c748740ac8c4a58684f8.setIcon(icon_d568198d819816a16514a5f2185a50b6);
-        
-    
-        var popup_262641b5f72fae8289047a2a210dc510 = L.popup({"maxWidth": "100%"});
-
-        
-            var html_2b06b8d9b3c656570d5f121a6784b0f9 = $(`<div id="html_2b06b8d9b3c656570d5f121a6784b0f9" style="width: 100.0%; height: 100.0%;">Animal Kingdom - Kilimanjaro Safaris</div>`)[0];
-            popup_262641b5f72fae8289047a2a210dc510.setContent(html_2b06b8d9b3c656570d5f121a6784b0f9);
-        
-
-        marker_07005887e2e8c748740ac8c4a58684f8.bindPopup(popup_262641b5f72fae8289047a2a210dc510)
-        ;
-
-        
-    
-    
-            var marker_a5370c1b49ca64823479356dce5b7e60 = L.marker(
-                [28.355, -81.5908],
-                {}
-            ).addTo(map_5a5403947d0c4cacb7d80c8b273e6aea);
-        
-    
-            var icon_bc9b13bac3b0e9d090c52208f564c033 = L.AwesomeMarkers.icon(
-                {"extraClasses": "fa-rotate-0", "icon": "info-sign", "iconColor": "white", "markerColor": "red", "prefix": "glyphicon"}
-            );
-            marker_a5370c1b49ca64823479356dce5b7e60.setIcon(icon_bc9b13bac3b0e9d090c52208f564c033);
-        
-    
-        var popup_00ffbb783c8d00e0782b53c1ba73f9f3 = L.popup({"maxWidth": "100%"});
-
-        
-            var html_47556878758816387ac00813ed05658d = $(`<div id="html_47556878758816387ac00813ed05658d" style="width: 100.0%; height: 100.0%;">Animal Kingdom - Avatar Flight of Passage</div>`)[0];
-            popup_00ffbb783c8d00e0782b53c1ba73f9f3.setContent(html_47556878758816387ac00813ed05658d);
-        
-
-        marker_a5370c1b49ca64823479356dce5b7e60.bindPopup(popup_00ffbb783c8d00e0782b53c1ba73f9f3)
-        ;
-
-        
-    
-    
-            var marker_19d96cd85c13f5fdfda37afa73c93eff = L.marker(
-                [28.3547, -81.5902],
-                {}
-            ).addTo(map_5a5403947d0c4cacb7d80c8b273e6aea);
-        
-    
-            var icon_2b47deba1d40338f66967e614f0b6686 = L.AwesomeMarkers.icon(
-                {"extraClasses": "fa-rotate-0", "icon": "info-sign", "iconColor": "white", "markerColor": "red", "prefix": "glyphicon"}
-            );
-            marker_19d96cd85c13f5fdfda37afa73c93eff.setIcon(icon_2b47deba1d40338f66967e614f0b6686);
-        
-    
-        var popup_bb4fbd69cd042102af969c9c82ef3214 = L.popup({"maxWidth": "100%"});
-
-        
-            var html_8426405bae026856626a4baeecd25354 = $(`<div id="html_8426405bae026856626a4baeecd25354" style="width: 100.0%; height: 100.0%;">Animal Kingdom - Satu'li Canteen</div>`)[0];
-            popup_bb4fbd69cd042102af969c9c82ef3214.setContent(html_8426405bae026856626a4baeecd25354);
-        
-
-        marker_19d96cd85c13f5fdfda37afa73c93eff.bindPopup(popup_bb4fbd69cd042102af969c9c82ef3214)
-        ;
-
-        
-    
-    
-            var marker_c94ce9a2f2634f52a95d2ca4d66629d1 = L.marker(
-                [28.3366, -81.5405],
-                {}
-            ).addTo(map_5a5403947d0c4cacb7d80c8b273e6aea);
-        
-    
-            var icon_1913febebe0badfae4fbb1ef75318e2c = L.AwesomeMarkers.icon(
-                {"extraClasses": "fa-rotate-0", "icon": "info-sign", "iconColor": "white", "markerColor": "purple", "prefix": "glyphicon"}
-            );
-            marker_c94ce9a2f2634f52a95d2ca4d66629d1.setIcon(icon_1913febebe0badfae4fbb1ef75318e2c);
-        
-    
-        var popup_308136612fe09da6768aa6d701c59cfe = L.popup({"maxWidth": "100%"});
-
-        
-            var html_62aafccd09553c63e24842e4eba15408 = $(`<div id="html_62aafccd09553c63e24842e4eba15408" style="width: 100.0%; height: 100.0%;">Disney's Pop Century Resort</div>`)[0];
-            popup_308136612fe09da6768aa6d701c59cfe.setContent(html_62aafccd09553c63e24842e4eba15408);
-        
-
-        marker_c94ce9a2f2634f52a95d2ca4d66629d1.bindPopup(popup_308136612fe09da6768aa6d701c59cfe)
-        ;
-
-        
-    
-    
-            var marker_8e9d0ef88e75624a120ae1ea27a1b71b = L.marker(
-                [28.4328, -81.4684],
-                {}
-            ).addTo(map_5a5403947d0c4cacb7d80c8b273e6aea);
-        
-    
-            var icon_c3d14cc3cd006b5c40132e8854c66674 = L.AwesomeMarkers.icon(
-                {"extraClasses": "fa-rotate-0", "icon": "info-sign", "iconColor": "white", "markerColor": "darkred", "prefix": "glyphicon"}
-            );
-            marker_8e9d0ef88e75624a120ae1ea27a1b71b.setIcon(icon_c3d14cc3cd006b5c40132e8854c66674);
-        
-    
-        var popup_23a541bb7adf73d37a5cb621c16c1257 = L.popup({"maxWidth": "100%"});
-
-        
-            var html_0cb5a35cecfccf6c434892da062783e7 = $(`<div id="html_0cb5a35cecfccf6c434892da062783e7" style="width: 100.0%; height: 100.0%;">Andretti Indoor Karting & Games</div>`)[0];
-            popup_23a541bb7adf73d37a5cb621c16c1257.setContent(html_0cb5a35cecfccf6c434892da062783e7);
-        
-
-        marker_8e9d0ef88e75624a120ae1ea27a1b71b.bindPopup(popup_23a541bb7adf73d37a5cb621c16c1257)
-        ;
-
-        
-    
-    
-            var marker_6af07332f68f2c77cab70a8af8971427 = L.marker(
-                [28.4294, -81.452],
-                {}
-            ).addTo(map_5a5403947d0c4cacb7d80c8b273e6aea);
-        
-    
-            var icon_54941e8dce0e6f511e23a71baf1fe38e = L.AwesomeMarkers.icon(
-                {"extraClasses": "fa-rotate-0", "icon": "info-sign", "iconColor": "white", "markerColor": "darkgreen", "prefix": "glyphicon"}
-            );
-            marker_6af07332f68f2c77cab70a8af8971427.setIcon(icon_54941e8dce0e6f511e23a71baf1fe38e);
-        
-    
-        var popup_96351a78eb518d272b016e8ce6f0d6a8 = L.popup({"maxWidth": "100%"});
-
-        
-            var html_b31bc79e5b6cc5e093f2bd815f1ee9f0 = $(`<div id="html_b31bc79e5b6cc5e093f2bd815f1ee9f0" style="width: 100.0%; height: 100.0%;">Nike Factory Store - Orlando International Premium Outlets</div>`)[0];
-            popup_96351a78eb518d272b016e8ce6f0d6a8.setContent(html_b31bc79e5b6cc5e093f2bd815f1ee9f0);
-        
-
-        marker_6af07332f68f2c77cab70a8af8971427.bindPopup(popup_96351a78eb518d272b016e8ce6f0d6a8)
-        ;
-
-        
-    
-    
-            var marker_d6bb0060bd8837eb16f3d8054fb6b1dc = L.marker(
-                [28.37, -81.519],
-                {}
-            ).addTo(map_5a5403947d0c4cacb7d80c8b273e6aea);
-        
-    
-            var icon_8bf50089c54fc86cce4b2d2d8a4dd3c5 = L.AwesomeMarkers.icon(
-                {"extraClasses": "fa-rotate-0", "icon": "info-sign", "iconColor": "white", "markerColor": "pink", "prefix": "glyphicon"}
-            );
-            marker_d6bb0060bd8837eb16f3d8054fb6b1dc.setIcon(icon_8bf50089c54fc86cce4b2d2d8a4dd3c5);
-        
-    
-        var popup_9163d17dd5ca4d4cf7badc1edbaa390c = L.popup({"maxWidth": "100%"});
-
-        
-            var html_0c50519ed776f3bac6ea86113bfad035 = $(`<div id="html_0c50519ed776f3bac6ea86113bfad035" style="width: 100.0%; height: 100.0%;">Disney Springs Shopping & Dining</div>`)[0];
-            popup_9163d17dd5ca4d4cf7badc1edbaa390c.setContent(html_0c50519ed776f3bac6ea86113bfad035);
-        
-
-        marker_d6bb0060bd8837eb16f3d8054fb6b1dc.bindPopup(popup_9163d17dd5ca4d4cf7badc1edbaa390c)
-        ;
-
-        
-    
-</script>
+    </script>
+</body>
 </html>
