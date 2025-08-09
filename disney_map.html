@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>מפת אורלנדו - עם ניווט לוויז וגוגל מאפס</title>
+    
+    <script src="https://cdn.jsdelivr.net/npm/leaflet@1.6.0/dist/leaflet.js"></script>
+    <script src="https://code.jquery.com/jquery-1.12.4.min.js"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.2.0/js/bootstrap.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Leaflet.awesome-markers/2.0.2/leaflet.awesome-markers.js"></script>
+    
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.6.0/dist/leaflet.css"/>
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.2.0/css/bootstrap.min.css"/>
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/font-awesome/4.6.3/css/font-awesome.min.css"/>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/Leaflet.awesome-markers/2.0.2/leaflet.awesome-markers.css"/>
+    
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            font-family: Arial, sans-serif;
+            direction: rtl;
+        }
+        
+        #map {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            right: 0;
+            left: 0;
+        }
+        
+        .popup-content {
+            direction: rtl;
+            text-align: right;
+            min-width: 300px;
+            background: white;
+            color: black;
+        }
+        
+        .location-title {
+            font-size: 18px;
+            font-weight: bold;
+            margin-bottom: 8px;
+            color: #000000;
+        }
+        
+        .location-description {
+            font-size: 15px;
+            margin-bottom: 10px;
+            color: #000000;
+            line-height: 1.4;
+        }
+        
+        .navigation-buttons {
+            display: flex;
+            gap: 8px;
+            margin-top: 10px;
+        }
+        
+        .nav-btn {
+            padding: 10px 16px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            text-decoration: none;
+            display: inline-block;
+            color: white;
+            text-align: center;
+            min-width: 80px;
+        }
+        
+        .waze-btn {
+            background-color: #33CCFF;
+        }
+        
+        .waze-btn:hover {
+            background-color: #1bb3e6;
+            color: white;
+        }
+        
+        .google-btn {
+            background-color: #4285f4;
+        }
+        
+        .google-btn:hover {
+            background-color: #3367d6;
+            color: white;
+        }
+        
+        .park-legend {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: white;
+            padding: 8px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.25);
+            z-index: 1000;
+            font-size: 12px;
+            max-width: 180px;
+            border: 2px solid #2c3e50;
+            display: none;
+        }
+        
+        .legend-toggle {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: #2c3e50;
+            color: white;
+            padding: 10px;
+            border-radius: 50%;
+            cursor: pointer;
+            z-index: 1001;
+            font-size: 16px;
+            width: 45px;
+            height: 45px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        }
+        
+        .legend-item {
+            margin: 5px 0;
+        }
+        
+        .legend-color {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-left: 5px;
+            vertical-align: middle;
+        }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+    
+    <div class="legend-toggle" onclick="toggleLegend()">
+        ℹ️
+    </div>
+    
+    <div class="park-legend" id="legend">
+        <h4 style="margin: 0 0 8px 0; color: #2c3e50;">מקרא:</h4>
+        <div class="legend-item">
+            <span class="legend-color" style="background-color: #0066cc;"></span>
+            Magic Kingdom
+        </div>
+        <div class="legend-item">
+            <span class="legend-color" style="background-color: #009900;"></span>
+            EPCOT
+        </div>
+        <div class="legend-item">
+            <span class="legend-color" style="background-color: #ff6600;"></span>
+            Hollywood Studios
+        </div>
+        <div class="legend-item">
+            <span class="legend-color" style="background-color: #cc0000;"></span>
+            Animal Kingdom
+        </div>
+        <div class="legend-item">
+            <span class="legend-color" style="background-color: #9933cc;"></span>
+            מלונות דיסני
+        </div>
+        <div class="legend-item">
+            <span class="legend-color" style="background-color: #ff3366;"></span>
+            קניות ובילויים
+        </div>
+        <div class="legend-item">
+            <span class="legend-color" style="background-color: #00cc66;"></span>
+            אאוטלטים
+        </div>
+        <div class="legend-item">
+            <span class="legend-color" style="background-color: #6600cc;"></span>
+            פעילויות נוספות
+        </div>
+    </div>
+
+    <script>
+        // יצירת המפה
+        var map = L.map('map', {
+            center: [28.3852, -81.5639],
+            zoom: 12,
+            zoomControl: true
+        });
+
+        // הוספת שכבת המפה
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: 'Map data © OpenStreetMap contributors',
+            maxZoom: 18
+        }).addTo(map);
+
+        // פונקציה ליצירת תוכן popup
+        function createPopupContent(title, description, lat, lng, tips = '') {
+            var content = `
+                <div class="popup-content">
+                    <div class="location-title">${title}</div>
+                    <div class="location-description">${description}</div>
+                    ${tips ? `<div style="font-size: 14px; color: #000000; margin-bottom: 8px; background: #f0f0f0; padding: 8px; border-radius: 4px;"><strong>💡 טיפ:</strong> ${tips}</div>` : ''}
+                    <div class="navigation-buttons">
+                        <a href="https://waze.com/ul?ll=${lat},${lng}&navigate=yes" 
+                           target="_blank" class="nav-btn waze-btn">וויז</a>
+                        <a href="https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}" 
+                           target="_blank" class="nav-btn google-btn">גוגל מאפס</a>
+                    </div>
+                </div>
+            `;
+            return content;
+        }
+
+        // פונקציה להצגה/הסתרה של המקרא
+        function toggleLegend() {
+            var legend = document.getElementById('legend');
+            if (legend.style.display === 'none' || legend.style.display === '') {
+                legend.style.display = 'block';
+            } else {
+                legend.style.display = 'none';
+            }
+        }
+
+        // נתוני המקומות עם תיאורים
+        var locations = [
+            // Magic Kingdom - כחול בהיר
+            {
+                coords: [28.4194, -81.5812],
+                title: "Seven Dwarfs Mine Train",
+                description: "רכבת הרים משפחתית פופולרית ביותר בעולם של שלגיה ושבעת הגמדים",
+                color: "blue",
+                tips: "הגיעו מוקדם! זוהי האטרקציה הפופולרית ביותר בפארק"
+            },
+            {
+                coords: [28.419, -81.583],
+                title: "Pirates of the Caribbean",
+                description: "שיט קלאסי בעולם הפיראטים עם אפקטים מדהימים",
+                color: "blue",
+                tips: "אטרקציה קלאסית מהנה לכל המשפחה"
+            },
+            {
+                coords: [28.4206, -81.5818],
+                title: "Be Our Guest Restaurant",
+                description: "מסעדה יוקרתית בטירת החיה והיפה - הזמנה מראש חובה",
+                color: "blue",
+                tips: "צריך הזמנה 60 יום מראש! ארוחת ערב יקרה אבל מיוחדת"
+            },
+
+            // EPCOT - ירוק
+            {
+                coords: [28.3747, -81.5494],
+                title: "Soarin' Around the World",
+                description: "סימולטור טיסה מדהים מעל נופים יפים בעולם",
+                color: "green",
+                tips: "אל תאכלו לפני! ויש ריח מיוחד בכל יעד"
+            },
+            {
+                coords: [28.3712, -81.5476],
+                title: "Frozen Ever After",
+                description: "נסיעה קסומה בעולם פרוזן עם אלזה ואנה",
+                color: "green",
+                tips: "פופולרי מאוד! השתמשו ב-Genie+ או בואו מוקדם"
+            },
+            {
+                coords: [28.3756, -81.5489],
+                title: "Coral Reef Restaurant",
+                description: "מסעדה ייחודית עם נוף לאקווריום ענק",
+                color: "green",
+                tips: "הנוף מדהים! בקשו שולחן ליד החלון"
+            },
+
+            // Hollywood Studios - כתום
+            {
+                coords: [28.3556, -81.5667],
+                title: "Slinky Dog Dash",
+                description: "רכבת הרים משפחתית בעולם צעצוע של סיפור",
+                color: "orange",
+                tips: "אחת האטרקציות החדשות והפופולריות!"
+            },
+            {
+                coords: [28.3567, -81.5594],
+                title: "Indiana Jones Stunt Show",
+                description: "מופע פעלולים מרהיב בסגנון אינדיאנה ג'ונס",
+                color: "orange",
+                tips: "מופע מדהים! בדקו זמני הצגה"
+            },
+            {
+                coords: [28.3563, -81.5602],
+                title: "Sci-Fi Dine-In Theater",
+                description: "מסעדה ייחודית בסגנון קולנוע דרייב-אין משנות ה-50",
+                color: "orange",
+                tips: "חוויה ייחודית! אוכל בינוני אבל האווירה מיוחדת"
+            },
+
+            // Animal Kingdom - אדום
+            {
+                coords: [28.3586, -81.5901],
+                title: "Kilimanjaro Safaris",
+                description: "ספארי אמיתי עם חיות פראיות באפריקה המדומה",
+                color: "red",
+                tips: "הטוב ביותר בבוקר או לקראת שקיעה כשהחיות פעילות"
+            },
+            {
+                coords: [28.355, -81.5908],
+                title: "Avatar Flight of Passage",
+                description: "סימולטור טיסה מהפכני בעולם פנדורה",
+                color: "red",
+                tips: "האטרקציה הטובה ביותר בדיסני! חובה לחוות"
+            },
+            {
+                coords: [28.3547, -81.5902],
+                title: "Satu'li Canteen",
+                description: "מסעדה בעולם פנדורה עם אוכל אקזוטי ומיוחד",
+                color: "red",
+                tips: "אוכל מעניין ושונה! נסו את ה-Bowl"
+            },
+
+            // מלונות ובילויים - סגול
+            {
+                coords: [28.3366, -81.5405],
+                title: "Disney's Pop Century Resort",
+                description: "מלון דיסני בנושא העשורים עם בריכות מהנות",
+                color: "purple",
+                tips: "מלון במחיר סביר של דיסני עם תחבורה חינם לפארקים"
+            },
+            {
+                coords: [28.37, -81.519],
+                title: "Disney Springs",
+                description: "אזור קניות, מסעדות ובילויים חינמי של דיסני",
+                color: "pink",
+                tips: "כניסה חינם! הרבה מסעדות וחנויות, חניה חינם"
+            },
+
+            // קניות ופעילויות
+            {
+                coords: [28.4294, -81.452],
+                title: "Orlando International Premium Outlets",
+                description: "אאוטלט גדול עם מותגים מובילים במחירים מצוינים",
+                color: "darkgreen",
+                tips: "הנחות מעולות! הביאו נעליים נוחות - המקום ענק"
+            },
+            {
+                coords: [28.4328, -81.4684],
+                title: "Andretti Indoor Karting & Games",
+                description: "מתחם משחקים ומרוצי קארטינג מקורה מתקדם",
+                color: "darkred",
+                tips: "פעילות מהנה לכל המשפחה! אפשר לשלב עם האאוטלט"
+            }
+        ];
+
+        // הוספת המרקרים למפה
+        locations.forEach(function(location) {
+            var marker = L.marker(location.coords).addTo(map);
+            
+            var icon = L.AwesomeMarkers.icon({
+                icon: 'info-sign',
+                iconColor: 'white',
+                markerColor: location.color,
+                prefix: 'glyphicon'
+            });
+            marker.setIcon(icon);
+
+            var popupContent = createPopupContent(
+                location.title, 
+                location.description, 
+                location.coords[0], 
+                location.coords[1],
+                location.tips
+            );
+            
+            marker.bindPopup(popupContent, {
+                maxWidth: 300,
+                className: 'custom-popup'
+            });
+        });
+
+        // הוספת פונקציונליות נוספת
+        map.on('popupopen', function() {
+            // התמקדות במרקר שנפתח
+            setTimeout(function() {
+                map.panTo(map.getPopup().getLatLng());
+            }, 100);
+        });
+
+    </script>
+</body>
+</html>

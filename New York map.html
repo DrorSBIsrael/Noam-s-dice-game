@@ -1,0 +1,575 @@
+var locations = [
+            // מלון ומסעדות - א<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>מפת ניו יורק - שבוע מושלם עם ניווט</title>
+    
+    <script src="https://cdn.jsdelivr.net/npm/leaflet@1.6.0/dist/leaflet.js"></script>
+    <script src="https://code.jquery.com/jquery-1.12.4.min.js"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.2.0/js/bootstrap.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Leaflet.awesome-markers/2.0.2/leaflet.awesome-markers.js"></script>
+    
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.6.0/dist/leaflet.css"/>
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.2.0/css/bootstrap.min.css"/>
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/font-awesome/4.6.3/css/font-awesome.min.css"/>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/Leaflet.awesome-markers/2.0.2/leaflet.awesome-markers.css"/>
+    
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            direction: rtl;
+        }
+        
+        #map {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            right: 0;
+            left: 0;
+        }
+        
+        .popup-content {
+            direction: rtl;
+            text-align: right;
+            min-width: 320px;
+            max-width: 400px;
+            background: white;
+            color: black;
+        }
+        
+        .location-title {
+            font-size: 19px;
+            font-weight: bold;
+            margin-bottom: 8px;
+            color: #000000;
+        }
+        
+        .location-subtitle {
+            font-size: 16px;
+            color: #000000;
+            margin-bottom: 6px;
+            font-weight: 500;
+        }
+        
+        .location-description {
+            font-size: 15px;
+            margin-bottom: 10px;
+            color: #000000;
+            line-height: 1.5;
+        }
+        
+        .location-tips {
+            font-size: 14px;
+            color: #000000;
+            margin-bottom: 8px;
+            background: #f0f0f0;
+            padding: 8px;
+            border-radius: 4px;
+            border-right: 3px solid #666666;
+        }
+        
+        .location-hours {
+            font-size: 14px;
+            color: #000000;
+            margin-bottom: 8px;
+            background: #f8f8f8;
+            padding: 8px;
+            border-radius: 4px;
+        }
+        
+        .navigation-buttons {
+            display: flex;
+            gap: 8px;
+            margin-top: 10px;
+        }
+        
+        .nav-btn {
+            padding: 10px 16px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            text-decoration: none;
+            display: inline-block;
+            color: white;
+            text-align: center;
+            min-width: 80px;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+        
+        .waze-btn {
+            background: linear-gradient(135deg, #33CCFF, #1bb3e6);
+        }
+        
+        .waze-btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 8px rgba(51, 204, 255, 0.3);
+            color: white;
+        }
+        
+        .google-btn {
+            background: linear-gradient(135deg, #4285f4, #3367d6);
+        }
+        
+        .google-btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 8px rgba(66, 133, 244, 0.3);
+            color: white;
+        }
+        
+        .uber-btn {
+            background: linear-gradient(135deg, #000000, #333333);
+        }
+        
+        .uber-btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+            color: white;
+        }
+        
+        .legend {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: white;
+            padding: 12px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.25);
+            z-index: 1000;
+            font-size: 12px;
+            max-width: 200px;
+            border: 2px solid #1a365d;
+            display: none;
+        }
+        
+        .legend-toggle {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: #1a365d;
+            color: white;
+            padding: 12px;
+            border-radius: 50%;
+            cursor: pointer;
+            z-index: 1001;
+            font-size: 18px;
+            width: 50px;
+            height: 50px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            font-weight: bold;
+        }
+        
+        .legend-title {
+            font-size: 14px;
+            font-weight: bold;
+            margin-bottom: 10px;
+            color: #1a365d;
+            text-align: center;
+        }
+        
+        .legend-item {
+            margin: 6px 0;
+            display: flex;
+            align-items: center;
+        }
+        
+        .legend-color {
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            margin-left: 8px;
+            border: 2px solid white;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.4);
+        }
+        
+        .day-suggestion {
+            display: none;
+        }
+        
+        .day-title {
+            font-weight: bold;
+            color: #1a365d;
+            margin-bottom: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+    
+    <div class="legend-toggle" onclick="toggleLegend()">
+        ℹ️
+    </div>
+    
+    <div class="legend" id="legend">
+        <div class="legend-title">🗽 מקרא ניו יורק</div>
+        <div class="legend-item">
+            <span class="legend-color" style="background-color: #cc0000;"></span>
+            <span>🏨 מלון ומסעדות</span>
+        </div>
+        <div class="legend-item">
+            <span class="legend-color" style="background-color: #009900;"></span>
+            <span>🏛️ מוזיאונים ותרבות</span>
+        </div>
+        <div class="legend-item">
+            <span class="legend-color" style="background-color: #0066cc;"></span>
+            <span>🌳 פארקים וטבע</span>
+        </div>
+        <div class="legend-item">
+            <span class="legend-color" style="background-color: #9933cc;"></span>
+            <span>🎭 ברודוויי ובידור</span>
+        </div>
+        <div class="legend-item">
+            <span class="legend-color" style="background-color: #ff6600;"></span>
+            <span>🛍️ קניות ומותגים</span>
+        </div>
+        <div class="legend-item">
+            <span class="legend-color" style="background-color: #ff3366;"></span>
+            <span>📸 נקודות תצפית</span>
+        </div>
+        <div class="legend-item">
+            <span class="legend-color" style="background-color: #3399ff;"></span>
+            <span>⛴️ אטרקציות ייחודיות</span>
+        </div>
+        <div class="legend-item">
+            <span class="legend-color" style="background-color: #00cc66;"></span>
+            <span>🚲 השכרת אופניים</span>
+        </div>
+    </div>
+    
+    <div class="day-suggestion">
+        <div class="day-title">💡 הצעה לשבוע:</div>
+        <div>יום 1: סנטרל פארק + מוזיאונים</div>
+        <div>יום 2: טיימס סקוור + ברודוויי</div>
+        <div>יום 3: סטטן איילנד + וול סטריט</div>
+        <div>יום 4: הארי פוטר + קניות</div>
+        <div>יום 5: ברוקלין + צ'יינה טאון</div>
+        <div>יום 6: מוזיאונים + חופש</div>
+        <div>יום 7: לינקולן סנטר + עוד קניות</div>
+    </div>
+
+    <script>
+        // יצירת המפה
+        var map = L.map('map', {
+            center: [40.7831, -73.9712],
+            zoom: 12,
+            zoomControl: true
+        });
+
+        // הוספת שכבת המפה
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: 'Map data © OpenStreetMap contributors',
+            maxZoom: 18
+        }).addTo(map);
+
+        // פונקציה ליצירת תוכן popup
+        function createPopupContent(title, subtitle, description, lat, lng, tips = '', hours = '', category = '') {
+            var content = `
+                <div class="popup-content">
+                    <div class="location-title">${title}</div>
+                    ${subtitle ? `<div class="location-subtitle">${subtitle}</div>` : ''}
+                    <div class="location-description">${description}</div>
+                    ${hours ? `<div class="location-hours"><strong>⏰ שעות:</strong> ${hours}</div>` : ''}
+                    ${tips ? `<div class="location-tips"><strong>💡 טיפ:</strong> ${tips}</div>` : ''}
+                    <div class="navigation-buttons">
+                        <a href="https://waze.com/ul?ll=${lat},${lng}&navigate=yes" 
+                           target="_blank" class="nav-btn waze-btn">וויז</a>
+                        <a href="https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}" 
+                           target="_blank" class="nav-btn google-btn">גוגל מאפס</a>
+                        <a href="https://m.uber.com/ul/?action=setPickup&pickup=my_location&dropoff[latitude]=${lat}&dropoff[longitude]=${lng}" 
+                           target="_blank" class="nav-btn uber-btn">אובר</a>
+                    </div>
+                </div>
+            `;
+            return content;
+        }
+
+        // פונקציה להצגה/הסתרה של המקרא
+        function toggleLegend() {
+            var legend = document.getElementById('legend');
+            if (legend.style.display === 'none' || legend.style.display === '') {
+                legend.style.display = 'block';
+            } else {
+                legend.style.display = 'none';
+            }
+        }
+
+        // נתוני המקומות
+        var locations = [
+            // מלון ומסעדות
+            {
+                coords: [40.7831, -73.9712],
+                title: "המלון שלכם 🏨",
+                subtitle: "2175 Broadway, Upper West Side",
+                description: "מיקום מעולה ליד Lincoln Center ו-Central Park. אזור שקט ובטוח עם הרבה מסעדות ברחבי הרחוב.",
+                color: "red",
+                tips: "המלון קרוב לרכבת תחתית קווים 1,2,3. מרחק הליכה לסנטרל פארק!"
+            },
+            {
+                coords: [40.7056, -73.9444],
+                title: "Peter Luger Steak House 🥩",
+                subtitle: "178 Broadway, Brooklyn",
+                description: "מסעדת הסטייק הטובה ביותר בניו יורק! פועלת מ-1887. חובה להזמין מראש!",
+                color: "red",
+                tips: "רק מזומן או כרטיס האשראי שלהם! הזמינו שבועות מראש. פורטרהאוס לשניים מומלץ!",
+                hours: "ב'-ה' 17:45-21:45, ו' 17:45-22:45, ש' 12:45-22:45"
+            },
+            {
+                coords: [40.7580, -73.9855],
+                title: "מסעדה אמריקאית 🍔",
+                subtitle: "1515 Broadway @ Times Square",
+                description: "מסעדה אמריקאית קלאסית בלב טיימס סקוור. נוף מדהים ואוכל טעים.",
+                color: "red",
+                tips: "מומלץ לבקר בשעות לא עמוסות. הנוף מהחלונות מדהים!"
+            },
+            {
+                coords: [40.7505, -73.9934],
+                title: "מסעדה סינית 🥢",
+                subtitle: "1011 6th Avenue",
+                description: "מסעדה סינית אותנטית ליד Herald Square. אוכל טעים במחירים סבירים.",
+                color: "red",
+                tips: "נסו את הדאק הפקיני ו-דים סאם. פתוח מאוחר!"
+            },
+
+            // אטרקציות מרכזיות
+            {
+                coords: [40.7829, -73.9654],
+                title: "Central Park 🌳",
+                subtitle: "אמצע מנהטן",
+                description: "הפארק הכי מפורסם בעולם! 341 הקטר של ירוק בלב מנהטן. אלפי דברים לעשות ולראות.",
+                color: "blue",
+                tips: "הביאו מים וחטיפים. מומלץ לשכור אופניים או לקחת סיור מודרך!",
+                hours: "6:00-01:00 כל יום"
+            },
+            {
+                coords: [40.7851, -73.9683],
+                title: "השכרת אופניים - Citi Bike 🚲",
+                subtitle: "תחנות ברחבי הפארק",
+                description: "דרך נהדרת לראות את סנטרל פארק! תחנות רבות ברחבי הפארק והעיר.",
+                color: "lightgreen",
+                tips: "15$ ליום, 95$ לשבוע. עם אפליקציה נוחה למציאת תחנות!",
+                hours: "24/7"
+            },
+            {
+                coords: [40.7614, -73.9776],
+                title: "Times Square ⚡",
+                subtitle: "צומת העולם",
+                description: "הכיכר הכי מפורסמת בעולם! מיליוני תיירים, פרסומות ענק ואנרגיה שלא נגמרת.",
+                color: "purple",
+                tips: "הכי יפה בלילה! שמרו על הארנק - הרבה כיסנים בגלל העומס",
+                hours: "תמיד פתוח ותמיד עמוס!"
+            },
+
+            // מוזיאונים
+            {
+                coords: [40.7794, -73.9632],
+                title: "American Museum of Natural History 🦕",
+                subtitle: "מוזיאון הטבע",
+                description: "המוזיאון הכי מרשים בעולם! דינוזאורים, פלנטריום ותערוכות מדהימות. כמו בסרט 'לילה במוזיאון'!",
+                color: "green",
+                tips: "קחו לפחות 4 שעות! תכננו מראש איזה אגפים אתם רוצים לראות. הפלנטריום בתוספת תשלום",
+                hours: "10:00-17:30 כל יום"
+            },
+            {
+                coords: [40.7794, -73.9755],
+                title: "Metropolitan Museum of Art 🎨",
+                subtitle: "המט",
+                description: "אחד המוזיאונים הגדולים בעולם! אמנות מכל העולם ומכל התקופות.",
+                color: "green",
+                tips: "התרומה מוצעת - תשלמו כמה שאתם רוצים! תכננו לפחות 3 שעות",
+                hours: "ה'-ב' 10:00-17:00, ו'-ש' 10:00-21:00"
+            },
+
+            // קניות
+            {
+                coords: [40.7587, -73.9787],
+                title: "FAO Schwarz 🧸",
+                subtitle: "חנות הצעצועים המפורסמת",
+                description: "חנות הצעצועים הכי מפורסמת בעולם! פסנתר ענק ברצפה וצעצועים מכל העולם.",
+                color: "orange",
+                tips: "הפסנתר הענק מהסרט 'Big'! יקר אבל שווה לראות",
+                hours: "10:00-20:00 (ש' עד 21:00)"
+            },
+            {
+                coords: [40.7637, -73.9731],
+                title: "Nike Store - 5th Avenue 👟",
+                subtitle: "חנות הדגל של נייקי",
+                description: "חנות ענקה של נייקי עם מוצרים בלעדיים ותחנות התאמה אישית.",
+                color: "orange",
+                tips: "בדקו מוצרים בלעדיים לניו יורק! שירות התאמה אישית מעולה"
+            },
+            {
+                coords: [40.7505, -73.9885],
+                title: "Macy's Herald Square 🛍️",
+                subtitle: "חנות הכלבו הגדולה בעולם",
+                description: "חנות כלבו אגדית! 10 קומות של קניות וכל מה שאפשר לרצות.",
+                color: "orange",
+                tips: "יש מדריך חינם בעברית! בקשו במידע ללקוחות. מבצעים מעולים!",
+                hours: "10:00-22:00 (ש' 10:00-23:00)"
+            },
+
+            // הארי פוטר ואטרקציות ייחודיות
+            {
+                coords: [40.7637, -73.9731],
+                title: "Harry Potter Store 🪄",
+                subtitle: "22 East 22nd Street & 5th Ave",
+                description: "חנות הארי פוטר הרשמית! 3 קומות של קסמים, כלי נגינה קסומים וחוויות אינטראקטיביות.",
+                color: "orange",
+                tips: "הכניסה חינם אבל יש תור! בואו מוקדם או הזמינו מראש באתר. התחנה האינטראקטיבית במטות קסמים מדהימה!",
+                hours: "10:00-22:00 כל יום"
+            },
+
+            // נקודות תצפית
+            {
+                coords: [40.7484, -73.9857],
+                title: "Empire State Building 🏢",
+                subtitle: "מצפה הכוכבים הקלאסי",
+                description: "הבניין הכי איקוני בניו יורק! מצפה כוכבים מהקומה ה-86 ו-102.",
+                color: "lightcoral",
+                tips: "קנו כרטיסים מראש באינטרנט! השקיעה והלילה הכי יפים. יקר אבל שווה!",
+                hours: "8:00-02:00 (עולים עד 01:15)"
+            },
+            {
+                coords: [40.7051, -74.0088],
+                title: "One World Observatory 🌆",
+                subtitle: "מצפה הכוכבים החדש",
+                description: "מצפה הכוכבים החדש ביותר עם טכנולוגיה מתקדמת ונוף מדהים של כל ניו יורק!",
+                color: "lightcoral",
+                tips: "פחות עמוס מאמפייר סטייט! השקיעה מיוחדת כאן. יש מסעדה במקום"
+            },
+
+            // רוף טופ וברים
+            {
+                coords: [40.7614, -73.9776],
+                title: "Rooftop Bars 🍹",
+                subtitle: "230 Fifth, Pod Hotels, SUMMIT",
+                description: "רוף טופ ברים עם נוף מדהים של העיר. 230 Fifth הכי מפורסם עם נוף לאמפייר סטייט.",
+                color: "lightcoral",
+                tips: "הזמינו מראש! לבשו יפה - יש דרס קוד. שתייה יקרה אבל הנוף פצה על הכל!",
+                hours: "בדרך כלל 17:00-02:00"
+            },
+
+            // איים ואטרקציות מיוחדות
+            {
+                coords: [40.6892, -74.0445],
+                title: "Statue of Liberty 🗽",
+                subtitle: "סטטן איילנד",
+                description: "פסל החירות האגדי! סמל אמריקה וניו יורק. שיט מרגש לאי עם נוף מדהים של מנהטן.",
+                color: "skyblue",
+                tips: "הזמינו מראש! שיט מבטרי פארק או ליברטי סטייט פארק. קחו ג'קט - רוח בים!",
+                hours: "9:30-17:00 (שיטים כל חצי שעה)"
+            },
+            {
+                coords: [40.7590, -73.9513],
+                title: "Roosevelt Island Tramway 🚡",
+                subtitle: "רכבל רוזוולט איילנד",
+                description: "רכבל מעל הנהר עם נוף מדהים של מנהטן! חוויה ייחודית ובמחיר של מטרו!",
+                color: "skyblue",
+                tips: "מחיר כרטיס מטרו רגיל! הכי יפה בשקיעה. פחות מ-4 דקות נסיעה",
+                hours: "6:00-02:00 (כל 7-15 דקות)"
+            },
+
+            // תרבות ובידור
+            {
+                coords: [40.7723, -73.9844],
+                title: "Lincoln Center 🎭",
+                subtitle: "מרכז התרבות של ניו יורק",
+                description: "בית האופרה המטרופוליטן, תיאטרון אוונרי פישר והפילהרמונית של ניו יורק.",
+                color: "purple",
+                tips: "בדקו מופעים מראש! יש הצגות בחינם לפעמים בקיץ בפארק הסמוך",
+                hours: "משתנה לפי מופעים"
+            },
+            {
+                coords: [40.7590, -73.9844],
+                title: "Broadway Shows 🎪",
+                subtitle: "התיאטרון הטוב ביותר בעולם",
+                description: "ברודוויי! המחזות הטובים ביותר בעולם. המלך האריה, פנטום האופרה, שיקגו ועוד!",
+                color: "purple",
+                tips: "קנו כרטיסים מראש או נסו באותו יום בTKTS בטיימס סקוור. השבת יש 2 הצגות!",
+                hours: "בדרך כלל 20:00 וב'-ה' גם 14:00"
+            },
+
+            // שווקים ואזורים מיוחדים
+            {
+                coords: [40.7184, -73.9857],
+                title: "Union Square 🏛️",
+                subtitle: "כיכר האיחוד",
+                description: "כיכר מרכזית עם שוק איכרים, אמנים רחוב ואנרגיה צעירה. מקום מפגש של תושבי העיר.",
+                color: "blue",
+                tips: "שוק איכרים ב'-ג'-ו'-ש'! מוסיקאים ואמנים רחוב. אזור מעולה לאנשים-ווצ'ינג",
+                hours: "תמיד פתוח, שוק איכרים 8:00-18:00"
+            },
+            {
+                coords: [40.7155, -73.9976],
+                title: "Chelsea Market 🥘",
+                subtitle: "שוק האוכל הטוב ביותר",
+                description: "שוק אוכל מקורה במבנה היסטורי. עשרות דוכני אוכל מכל העולם!",
+                color: "red",
+                tips: "רעבים לפני הכניסה! יש הכל - מטאקו מקסיקני ועד סושי יפני. מומלץ לחלוק מנות!",
+                hours: "7:00-21:00 (ו' עד 22:00)"
+            },
+
+            // אזורים אתניים
+            {
+                coords: [40.7157, -73.9970],
+                title: "Chinatown & Little Italy 🏮",
+                subtitle: "הרובע הסיני ואיטליה הקטנה",
+                description: "שני רבעים אתניים מדהימים! אוכל אותנטי, שוקים צבעוניים ותרבות מקורית.",
+                color: "red",
+                tips: "נסו דים סאם בצ'יינה טאון ופיצה באיטליה הקטנה! סיור רגלי מושלם",
+                hours: "רוב החנויות 10:00-22:00"
+            }
+        ];
+
+        // הוספת המרקרים למפה
+        locations.forEach(function(location) {
+            var marker = L.marker(location.coords).addTo(map);
+            
+            var icon = L.AwesomeMarkers.icon({
+                icon: 'info-sign',
+                iconColor: 'white',
+                markerColor: location.color,
+                prefix: 'glyphicon'
+            });
+            marker.setIcon(icon);
+
+            var popupContent = createPopupContent(
+                location.title, 
+                location.subtitle || '',
+                location.description, 
+                location.coords[0], 
+                location.coords[1],
+                location.tips || '',
+                location.hours || ''
+            );
+            
+            marker.bindPopup(popupContent, {
+                maxWidth: 400,
+                className: 'custom-popup'
+            });
+        });
+
+        // הוספת פונקציונליות נוספת
+        map.on('popupopen', function() {
+            setTimeout(function() {
+                map.panTo(map.getPopup().getLatLng());
+            }, 100);
+        });
+
+        // הוספת קבוצות שכבות (layers)
+        var restaurantGroup = L.layerGroup();
+        var attractionGroup = L.layerGroup();
+        var shoppingGroup = L.layerGroup();
+
+    </script>
+</body>
+</html>
