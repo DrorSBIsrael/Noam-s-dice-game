@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>מפת אורלנדו - עם ניווט לוויז וגוגל מאפס</title>
+    <title>מפת EPCOT - מסע מסביב לעולם</title>
     
     <script src="https://cdn.jsdelivr.net/npm/leaflet@1.6.0/dist/leaflet.js"></script>
     <script src="https://code.jquery.com/jquery-1.12.4.min.js"></script>
@@ -21,7 +21,7 @@
             padding: 0;
             width: 100%;
             height: 100%;
-            font-family: Arial, sans-serif;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             direction: rtl;
         }
         
@@ -36,23 +36,67 @@
         .popup-content {
             direction: rtl;
             text-align: right;
-            min-width: 300px;
+            min-width: 320px;
             background: white;
             color: black;
         }
         
-        .location-title {
-            font-size: 18px;
+        .attraction-title {
+            font-size: 19px;
             font-weight: bold;
             margin-bottom: 8px;
             color: #000000;
         }
         
-        .location-description {
+        .attraction-category {
+            font-size: 15px;
+            font-weight: bold;
+            margin-bottom: 6px;
+            padding: 4px 8px;
+            border-radius: 4px;
+            display: inline-block;
+        }
+        
+        .future-world { background: #00bcd4; color: white; }
+        .world-showcase { background: #ff9800; color: white; }
+        .restaurant { background: #4caf50; color: white; }
+        .fireworks { background: #e91e63; color: white; }
+        
+        .attraction-details {
             font-size: 15px;
             margin-bottom: 10px;
             color: #000000;
-            line-height: 1.4;
+            line-height: 1.5;
+        }
+        
+        .wait-time {
+            font-size: 14px;
+            color: #000000;
+            margin-bottom: 8px;
+            background: #fff3cd;
+            padding: 6px;
+            border-radius: 4px;
+            border-right: 3px solid #ffc107;
+        }
+        
+        .visit-time {
+            font-size: 14px;
+            color: #000000;
+            margin-bottom: 8px;
+            background: #d1ecf1;
+            padding: 6px;
+            border-radius: 4px;
+            border-right: 3px solid #17a2b8;
+        }
+        
+        .food-info {
+            font-size: 14px;
+            color: #000000;
+            margin-bottom: 8px;
+            background: #d4edda;
+            padding: 6px;
+            border-radius: 4px;
+            border-right: 3px solid #28a745;
         }
         
         .navigation-buttons {
@@ -62,81 +106,128 @@
         }
         
         .nav-btn {
-            padding: 10px 16px;
+            padding: 8px 12px;
             border: none;
-            border-radius: 4px;
+            border-radius: 6px;
             cursor: pointer;
-            font-size: 14px;
+            font-size: 13px;
             text-decoration: none;
             display: inline-block;
             color: white;
             text-align: center;
-            min-width: 80px;
+            min-width: 70px;
+            font-weight: 500;
         }
         
-        .waze-btn {
-            background-color: #33CCFF;
+        .disney-btn {
+            background: linear-gradient(135deg, #1e3a8a, #3b82f6);
         }
         
-        .waze-btn:hover {
-            background-color: #1bb3e6;
-            color: white;
-        }
-        
-        .google-btn {
-            background-color: #4285f4;
-        }
-        
-        .google-btn:hover {
-            background-color: #3367d6;
-            color: white;
-        }
-        
-        .park-legend {
-            position: absolute;
-            top: 10px;
-            right: 10px;
-            background: white;
-            padding: 8px;
-            border-radius: 8px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.25);
-            z-index: 1000;
-            font-size: 12px;
-            max-width: 180px;
-            border: 2px solid #2c3e50;
-            display: none;
+        .order-btn {
+            background: linear-gradient(135deg, #059669, #10b981);
         }
         
         .legend-toggle {
             position: absolute;
             top: 10px;
             right: 10px;
-            background: #2c3e50;
+            background: #1e3a8a;
             color: white;
-            padding: 10px;
+            padding: 12px;
             border-radius: 50%;
             cursor: pointer;
             z-index: 1001;
-            font-size: 16px;
-            width: 45px;
-            height: 45px;
+            font-size: 18px;
+            width: 50px;
+            height: 50px;
             display: flex;
             align-items: center;
             justify-content: center;
             box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            font-weight: bold;
+        }
+        
+        .legend {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.25);
+            z-index: 1000;
+            font-size: 12px;
+            max-width: 250px;
+            border: 2px solid #1e3a8a;
+            display: none;
+        }
+        
+        .legend-title {
+            font-size: 15px;
+            font-weight: bold;
+            margin-bottom: 12px;
+            color: #1e3a8a;
+            text-align: center;
         }
         
         .legend-item {
-            margin: 5px 0;
+            margin: 8px 0;
+            display: flex;
+            align-items: center;
         }
         
         .legend-color {
-            display: inline-block;
-            width: 12px;
-            height: 12px;
+            width: 18px;
+            height: 18px;
             border-radius: 50%;
-            margin-left: 5px;
-            vertical-align: middle;
+            margin-left: 8px;
+            border: 2px solid white;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.4);
+        }
+        
+        .time-strategy {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            background: rgba(255,255,255,0.95);
+            padding: 12px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            z-index: 1000;
+            font-size: 12px;
+            max-width: 220px;
+            border: 1px solid #e2e8f0;
+        }
+        
+        .strategy-title {
+            font-weight: bold;
+            color: #1e3a8a;
+            margin-bottom: 5px;
+            font-size: 13px;
+        }
+        
+        .time-slot {
+            margin: 3px 0;
+            font-size: 11px;
+        }
+        
+        .park-info {
+            position: absolute;
+            top: 70px;
+            right: 10px;
+            background: rgba(30, 58, 138, 0.9);
+            color: white;
+            padding: 10px;
+            border-radius: 8px;
+            z-index: 1000;
+            font-size: 12px;
+            max-width: 180px;
+        }
+        
+        .park-title {
+            font-weight: bold;
+            margin-bottom: 5px;
+            font-size: 13px;
         }
     </style>
 </head>
@@ -144,76 +235,69 @@
     <div id="map"></div>
     
     <div class="legend-toggle" onclick="toggleLegend()">
-        ℹ️
+        🌍
     </div>
     
-    <div class="park-legend" id="legend">
-        <h4 style="margin: 0 0 8px 0; color: #2c3e50;">מקרא:</h4>
+    <div class="legend" id="legend">
+        <div class="legend-title">🌍 מקרא EPCOT</div>
         <div class="legend-item">
-            <span class="legend-color" style="background-color: #0066cc;"></span>
-            Magic Kingdom
-        </div>
-        <div class="legend-item">
-            <span class="legend-color" style="background-color: #009900;"></span>
-            EPCOT
+            <span class="legend-color" style="background-color: #ff0000;"></span>
+            <span>⭐⭐⭐ חובה מוחלטת!</span>
         </div>
         <div class="legend-item">
             <span class="legend-color" style="background-color: #ff6600;"></span>
-            Hollywood Studios
+            <span>⭐⭐ מומלץ מאוד</span>
         </div>
         <div class="legend-item">
-            <span class="legend-color" style="background-color: #cc0000;"></span>
-            Animal Kingdom
+            <span class="legend-color" style="background-color: #4CAF50;"></span>
+            <span>⭐ כדאי אם יש זמן</span>
         </div>
         <div class="legend-item">
-            <span class="legend-color" style="background-color: #9933cc;"></span>
-            מלונות דיסני
+            <span class="legend-color" style="background-color: #9C27B0;"></span>
+            <span>🍽️ מסעדות ואוכל</span>
         </div>
         <div class="legend-item">
-            <span class="legend-color" style="background-color: #ff3366;"></span>
-            קניות ובילויים
+            <span class="legend-color" style="background-color: #2196F3;"></span>
+            <span>🌎 מדינות World Showcase</span>
         </div>
         <div class="legend-item">
-            <span class="legend-color" style="background-color: #00cc66;"></span>
-            אאוטלטים
+            <span class="legend-color" style="background-color: #FF1744;"></span>
+            <span>🎆 זיקוקים</span>
         </div>
-        <div class="legend-item">
-            <span class="legend-color" style="background-color: #6600cc;"></span>
-            פעילויות נוספות
-        </div>
+    </div>
+    
+    <div class="park-info">
+        <div class="park-title">🌍 EPCOT</div>
+        <div>📍 ליד Pop Century</div>
+        <div>⏰ בדרך כלל: 9:00-22:00</div>
+        <div>🎫 Genie+ מומלץ!</div>
+        <div>🍗 Turkish Chicken בצהריים</div>
+    </div>
+    
+    <div class="time-strategy">
+        <div class="strategy-title">⏰ אסטרטגיית היום:</div>
+        <div class="time-slot"><strong>8:30:</strong> Frozen Ever After</div>
+        <div class="time-slot"><strong>9:30:</strong> Soarin'</div>
+        <div class="time-slot"><strong>10:30:</strong> The Seas</div>
+        <div class="time-slot"><strong>12:00:</strong> Turkish Chicken 🍗</div>
+        <div class="time-slot"><strong>13:30:</strong> World Showcase</div>
+        <div class="time-slot"><strong>17:00:</strong> עוד אטרקציות</div>
+        <div class="time-slot"><strong>20:00:</strong> זיקוקים! 🎆</div>
     </div>
 
     <script>
         // יצירת המפה
         var map = L.map('map', {
-            center: [28.3852, -81.5639],
-            zoom: 12,
+            center: [28.3747, -81.5489],
+            zoom: 15,
             zoomControl: true
         });
 
         // הוספת שכבת המפה
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             attribution: 'Map data © OpenStreetMap contributors',
-            maxZoom: 18
+            maxZoom: 19
         }).addTo(map);
-
-        // פונקציה ליצירת תוכן popup
-        function createPopupContent(title, description, lat, lng, tips = '') {
-            var content = `
-                <div class="popup-content">
-                    <div class="location-title">${title}</div>
-                    <div class="location-description">${description}</div>
-                    ${tips ? `<div style="font-size: 14px; color: #000000; margin-bottom: 8px; background: #f0f0f0; padding: 8px; border-radius: 4px;"><strong>💡 טיפ:</strong> ${tips}</div>` : ''}
-                    <div class="navigation-buttons">
-                        <a href="https://waze.com/ul?ll=${lat},${lng}&navigate=yes" 
-                           target="_blank" class="nav-btn waze-btn">וויז</a>
-                        <a href="https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}" 
-                           target="_blank" class="nav-btn google-btn">גוגל מאפס</a>
-                    </div>
-                </div>
-            `;
-            return content;
-        }
 
         // פונקציה להצגה/הסתרה של המקרא
         function toggleLegend() {
@@ -225,164 +309,234 @@
             }
         }
 
-        // נתוני המקומות עם תיאורים
-        var locations = [
-            // Magic Kingdom - כחול בהיר
-            {
-                coords: [28.4194, -81.5812],
-                title: "Seven Dwarfs Mine Train",
-                description: "רכבת הרים משפחתית פופולרית ביותר בעולם של שלגיה ושבעת הגמדים",
-                color: "blue",
-                tips: "הגיעו מוקדם! זוהי האטרקציה הפופולרית ביותר בפארק"
-            },
-            {
-                coords: [28.419, -81.583],
-                title: "Pirates of the Caribbean",
-                description: "שיט קלאסי בעולם הפיראטים עם אפקטים מדהימים",
-                color: "blue",
-                tips: "אטרקציה קלאסית מהנה לכל המשפחה"
-            },
-            {
-                coords: [28.4206, -81.5818],
-                title: "Be Our Guest Restaurant",
-                description: "מסעדה יוקרתית בטירת החיה והיפה - הזמנה מראש חובה",
-                color: "blue",
-                tips: "צריך הזמנה 60 יום מראש! ארוחת ערב יקרה אבל מיוחדת"
-            },
+        // פונקציה ליצירת תוכן popup
+        function createPopupContent(title, category, description, timing, specialInfo = '', tips = '') {
+            var content = `
+                <div class="popup-content">
+                    <div class="attraction-title">${title}</div>
+                    <div class="attraction-category ${category.toLowerCase().replace(' ', '-')}">${category}</div>
+                    <div class="attraction-details">${description}</div>
+                    ${timing ? `<div class="visit-time"><strong>🕐 הזמן הטוב ביותר:</strong> ${timing}</div>` : ''}
+                    ${specialInfo ? `<div class="food-info">${specialInfo}</div>` : ''}
+                    ${tips ? `<div style="font-size: 13px; color: #000000; margin-bottom: 8px; background: #e8f5e8; padding: 6px; border-radius: 4px;"><strong>💡 טיפ:</strong> ${tips}</div>` : ''}
+                    <div class="navigation-buttons">
+                        <a href="https://disneyworld.disney.go.com/attractions/" 
+                           target="_blank" class="nav-btn disney-btn">אפליקציית דיסני</a>
+                    </div>
+                </div>
+            `;
+            return content;
+        }
 
-            // EPCOT - ירוק
-            {
-                coords: [28.3747, -81.5494],
-                title: "Soarin' Around the World",
-                description: "סימולטור טיסה מדהים מעל נופים יפים בעולם",
-                color: "green",
-                tips: "אל תאכלו לפני! ויש ריח מיוחד בכל יעד"
-            },
+        // נתוני האטרקציות והמסעדות
+        var attractions = [
+            // Future World - אטרקציות חובה
             {
                 coords: [28.3712, -81.5476],
-                title: "Frozen Ever After",
-                description: "נסיעה קסומה בעולם פרוזן עם אלזה ואנה",
-                color: "green",
-                tips: "פופולרי מאוד! השתמשו ב-Genie+ או בואו מוקדם"
+                title: "🧊 Frozen Ever After",
+                category: "Future World",
+                description: "נסיעה קסומה בעולם פרוזן עם אלזה ואנה. האטרקציה הפופולרית ביותר ב-EPCOT!",
+                timing: "8:30 בבוקר - ראשון!",
+                tips: "השתמשו ב-Genie+ או בואו מוקדם מאוד. התור הכי ארוך בפארק!",
+                color: "red"
+            },
+            {
+                coords: [28.3747, -81.5494],
+                title: "✈️ Soarin' Around the World",
+                category: "Future World",
+                description: "סימולטור טיסה מדהים מעל נופים יפים בעולם. חוויה מרגשת לכל המשפחה!",
+                timing: "9:30-10:30 בבוקר",
+                tips: "אל תאכלו לפני! יש ריחות מיוחדים בכל יעד שמוסיפים לחוויה",
+                color: "red"
             },
             {
                 coords: [28.3756, -81.5489],
-                title: "Coral Reef Restaurant",
-                description: "מסעדה ייחודית עם נוף לאקווריום ענק",
-                color: "green",
-                tips: "הנוף מדהים! בקשו שולחן ליד החלון"
+                title: "🐠 The Seas with Nemo & Friends",
+                category: "Future World",
+                description: "נסיעה מתחת למים עם נמו ודורי + אקווריום ענק עם דולפינים!",
+                timing: "10:30-11:30 בבוקר",
+                tips: "אחרי הנסיעה, חובה לבקר באקווריום! יש דולפינים ובעלי חיים ימיים מדהימים",
+                color: "orange"
+            },
+            {
+                coords: [28.3738, -81.5503],
+                title: "🚗 Test Track",
+                category: "Future World",
+                description: "עיצבו רכב וצאו לנסיעת מבחן מהירה! מגיעים למהירות של 105 קמ״ש",
+                timing: "17:00-18:00 בערב",
+                tips: "אם הספקתם - זו חוויה מדהימה! תעצבו רכב ותראו איך הוא מתנהג",
+                color: "orange"
             },
 
-            // Hollywood Studios - כתום
+            // ארוחת הצהריים - Turkish Chicken
             {
-                coords: [28.3556, -81.5667],
-                title: "Slinky Dog Dash",
-                description: "רכבת הרים משפחתית בעולם צעצוע של סיפור",
-                color: "orange",
-                tips: "אחת האטרקציות החדשות והפופולריות!"
-            },
-            {
-                coords: [28.3567, -81.5594],
-                title: "Indiana Jones Stunt Show",
-                description: "מופע פעלולים מרהיב בסגנון אינדיאנה ג'ונס",
-                color: "orange",
-                tips: "מופע מדהים! בדקו זמני הצגה"
-            },
-            {
-                coords: [28.3563, -81.5602],
-                title: "Sci-Fi Dine-In Theater",
-                description: "מסעדה ייחודית בסגנון קולנוע דרייב-אין משנות ה-50",
-                color: "orange",
-                tips: "חוויה ייחודית! אוכל בינוני אבל האווירה מיוחדת"
+                coords: [28.3723, -81.5465],
+                title: "🍗 Turkish Chicken - Tangerine Cafe",
+                category: "Restaurant",
+                description: "הארוחה שלכם! Turkish Chicken Shawarma במרוקו - טעים ואותנטי",
+                timing: "12:00-13:30 - ארוחת צהריים",
+                specialInfo: "<strong>🍽️ המנה:</strong> Chicken Shawarma Platter - עוף בתבלינים מרוקאיים עם אורז ופיתה. מחיר: כ-$16",
+                tips: "אחד המקומות הטובים לאכול ב-EPCOT! אווירה מרוקאית אמיתית",
+                color: "purple"
             },
 
-            // Animal Kingdom - אדום
+            // World Showcase - מסע מסביב לעולם
             {
-                coords: [28.3586, -81.5901],
-                title: "Kilimanjaro Safaris",
-                description: "ספארי אמיתי עם חיות פראיות באפריקה המדומה",
-                color: "red",
-                tips: "הטוב ביותר בבוקר או לקראת שקיעה כשהחיות פעילות"
+                coords: [28.3715, -81.5445],
+                title: "🇲🇽 Mexico - Gran Fiesta Tour",
+                category: "World Showcase",
+                description: "נסיעה נהדרת במקסיקו עם שלושת הקבלרוס ודונלד דאק",
+                timing: "13:30-14:00",
+                tips: "האטרקציה במקסיקו נחמדה ומרגיעה. בפנים יש גם מסעדות מקסיקניות טובות",
+                color: "blue"
             },
             {
-                coords: [28.355, -81.5908],
-                title: "Avatar Flight of Passage",
-                description: "סימולטור טיסה מהפכני בעולם פנדורה",
-                color: "red",
-                tips: "האטרקציה הטובה ביותר בדיסני! חובה לחוות"
+                coords: [28.3725, -81.5448],
+                title: "🇨🇳 China - Reflections of China",
+                category: "World Showcase",
+                description: "סרט 360 מעגלי מדהים על סין - נופים עוצרי נשימה!",
+                timing: "14:30-15:00",
+                tips: "הסרט מדהים! עומדים במעגל ורואים את כל סין מסביב",
+                color: "blue"
             },
             {
-                coords: [28.3547, -81.5902],
-                title: "Satu'li Canteen",
-                description: "מסעדה בעולם פנדורה עם אוכל אקזוטי ומיוחד",
-                color: "red",
-                tips: "אוכל מעניין ושונה! נסו את ה-Bowl"
+                coords: [28.3738, -81.5445],
+                title: "🇩🇪 Germany",
+                category: "World Showcase",
+                description: "כפר גרמני מקסים עם חנויות מיוחדות ובירה גרמנית אמיתית",
+                timing: "15:00-15:30",
+                tips: "נסו בירה גרמנית או קנו שוקולד גרמני מעולה!",
+                color: "blue"
+            },
+            {
+                coords: [28.3748, -81.5448],
+                title: "🇮🇹 Italy",
+                category: "World Showcase",
+                description: "כיכר איטלקית יפיפה עם הג'לאטו הטוב ביותר בכל דיסני!",
+                timing: "15:30-16:00",
+                tips: "חובה לנסות ג'לאטו! זה הטוב ביותר בכל דיסני וורלד",
+                color: "blue"
+            },
+            {
+                coords: [28.3755, -81.5455],
+                title: "🇺🇸 American Adventure",
+                category: "World Showcase",
+                description: "מופע מרגש ומרהיב על ההיסטוריה האמריקנית עם רובוטים מדהימים",
+                timing: "16:00-16:30",
+                tips: "המופע הטוב ביותר ב-World Showcase! מרגש גם למי שלא אמריקני",
+                color: "orange"
+            },
+            {
+                coords: [28.3762, -81.5465],
+                title: "🇯🇵 Japan",
+                category: "World Showcase",
+                description: "גן יפני מדהים עם חנויות יפניות מיוחדות וסושי טעים",
+                timing: "16:30-17:00",
+                tips: "החנויות יפניות מיוחדות! יש גם מסעדת סושי מעולה",
+                color: "blue"
+            },
+            {
+                coords: [28.3765, -81.5475],
+                title: "🇫🇷 France",
+                category: "World Showcase",
+                description: "כפר צרפתי מקסים עם מאפייה צרפתית ומסעדה טובה",
+                timing: "17:00-17:30",
+                tips: "נסו קרואסון או מקרון צרפתי אמיתי!",
+                color: "blue"
+            },
+            {
+                coords: [28.3768, -81.5485],
+                title: "🇬🇧 United Kingdom",
+                category: "World Showcase",
+                description: "פאב אנגלי אמיתי עם פיש אנד צ'יפס מעולה",
+                timing: "17:30-18:00",
+                tips: "הפיש אנד צ'יפס טעים! אווירה בריטית אמיתית",
+                color: "blue"
+            },
+            {
+                coords: [28.3765, -81.5495],
+                title: "🇨🇦 Canada - O Canada!",
+                category: "World Showcase",
+                description: "סרט מעגלי נוסף על קנדה - נופי טבע מדהימים",
+                timing: "18:00-18:30",
+                tips: "סרט יפה על קנדה! נופים מדהימים של הטבע הקנדי",
+                color: "blue"
             },
 
-            // מלונות ובילויים - סגול
+            // אטרקציות נוספות ב-Future World
             {
-                coords: [28.3366, -81.5405],
-                title: "Disney's Pop Century Resort",
-                description: "מלון דיסני בנושא העשורים עם בריכות מהנות",
-                color: "purple",
-                tips: "מלון במחיר סביר של דיסני עם תחבורה חינם לפארקים"
+                coords: [28.3735, -81.5515],
+                title: "🌱 Living with the Land",
+                category: "Future World",
+                description: "נסיעה מרגיעה בחממות מתקדמות - איך גידולים גדלים בעתיד",
+                timing: "11:30-12:00 או 18:30-19:00",
+                tips: "אטרקציה מרגיעה ומעניינת! תראו איך מגדלים אוכל בחלל",
+                color: "green"
             },
             {
-                coords: [28.37, -81.519],
-                title: "Disney Springs",
-                description: "אזור קניות, מסעדות ובילויים חינמי של דיסני",
-                color: "pink",
-                tips: "כניסה חינם! הרבה מסעדות וחנויות, חניה חינם"
+                coords: [28.3742, -81.5520],
+                title: "🧪 Imagination with Figment",
+                category: "Future World",
+                description: "נסיעה משעשעת עם Figment הדרקון הסגול המפורסם",
+                timing: "11:00-11:30 או 19:00-19:30",
+                tips: "קלאסיקה של EPCOT! Figment הוא הקמע של הפארק",
+                color: "green"
+            },
+            {
+                coords: [28.3730, -81.5510],
+                title: "🚀 Mission: SPACE",
+                category: "Future World",
+                description: "סימולטור חלל אינטנסיבי - טיסה למאדים! יש גרסה רגילה ואינטנסיבית",
+                timing: "19:30-20:00 (אם אוהבים אקסטרים)",
+                tips: "אם רגישים לסחרחורת - קחו את הגרסה הירוקה (פחות אינטנסיבית)",
+                color: "green"
             },
 
-            // קניות ופעילויות
+            // הזיקוקים
             {
-                coords: [28.4294, -81.452],
-                title: "Orlando International Premium Outlets",
-                description: "אאוטלט גדול עם מותגים מובילים במחירים מצוינים",
-                color: "darkgreen",
-                tips: "הנחות מעולות! הביאו נעליים נוחות - המקום ענק"
-            },
-            {
-                coords: [28.4328, -81.4684],
-                title: "Andretti Indoor Karting & Games",
-                description: "מתחם משחקים ומרוצי קארטינג מקורה מתקדם",
-                color: "darkred",
-                tips: "פעילות מהנה לכל המשפחה! אפשר לשלב עם האאוטלט"
+                coords: [28.3745, -81.5470],
+                title: "🎆 EPCOT Forever",
+                category: "Fireworks",
+                description: "מופע זיקוקים מדהים מעל הלגונה! הסיום המושלם ליום ב-EPCOT",
+                timing: "20:00-21:00 (בדקו באפליקציה)",
+                tips: "בואו 30 דקות מראש למקום טוב! הנוף הטוב ביותר מ-World Showcase",
+                color: "darkred"
             }
         ];
 
         // הוספת המרקרים למפה
-        locations.forEach(function(location) {
-            var marker = L.marker(location.coords).addTo(map);
+        attractions.forEach(function(attraction) {
+            var marker = L.marker(attraction.coords).addTo(map);
             
             var icon = L.AwesomeMarkers.icon({
                 icon: 'info-sign',
                 iconColor: 'white',
-                markerColor: location.color,
+                markerColor: attraction.color,
                 prefix: 'glyphicon'
             });
             marker.setIcon(icon);
 
             var popupContent = createPopupContent(
-                location.title, 
-                location.description, 
-                location.coords[0], 
-                location.coords[1],
-                location.tips
+                attraction.title, 
+                attraction.category,
+                attraction.description, 
+                attraction.timing,
+                attraction.specialInfo,
+                attraction.tips
             );
             
             marker.bindPopup(popupContent, {
-                maxWidth: 300,
+                maxWidth: 400,
                 className: 'custom-popup'
             });
         });
 
         // הוספת פונקציונליות נוספת
         map.on('popupopen', function() {
-            // התמקדות במרקר שנפתח
             setTimeout(function() {
-                map.panTo(map.getPopup().getLatLng());
+                if (map.getPopup()) {
+                    map.panTo(map.getPopup().getLatLng());
+                }
             }, 100);
         });
 
